@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tecap"
+version = "0.1.0"
+description = "3' terminal exon capture diagnostics for long-read scRNA-seq"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Simone Picelli", email = "simone.picelli@iob.ch"},
+]
+keywords = ["scRNA-seq", "long-read", "PacBio", "ONT", "polyA", "internal-priming", "APA"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "pysam>=0.22",
+    "intervaltree>=3.1",
+    "matplotlib>=3.5",
+    "numpy>=1.22",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+tecap = "tecap.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/FullLengthFanatic/tecap"
+Issues = "https://github.com/FullLengthFanatic/tecap/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tecap"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
