@@ -1,25 +1,39 @@
 """BAM iteration, classification dispatch, accumulator merging.
 
-Chromosomes are the parallelism unit. Gene and polyA indices are built once in
-the parent and shared read-only with worker processes via fork()."""
+Chromosomes are the parallelism unit. Gene and polyA indices are placed in
+module-level globals before the worker pool is forked, so each worker inherits
+them via copy-on-write rather than receiving them through pickle. Contigs with
+no mapped reads (per the BAM index) are skipped at the parent."""
 
 import csv
 import logging
 import multiprocessing as mp
-import os
 from collections import defaultdict
 
-import numpy as np
 import pysam
 
 from tecap.classify import classify_read
 from tecap.constants import (
-    CATEGORIES, CAPTURED, MECH_A_CORRECT, MECH_B_APA,
+    CAPTURED,
+    CATEGORIES,
+    MECH_A_CORRECT,
+    MECH_B_APA,
     UTR_BIN_LABELS,
 )
 from tecap.polya import utr_bin
 
 log = logging.getLogger(__name__)
+
+
+_WORKER = {
+    "bam_path":      None,
+    "gene_index":    None,
+    "gene_records":  None,
+    "polya_index":   None,
+    "cov_threshold": None,
+    "min_mapq":      None,
+    "cb_tag":        None,
+}
 
 
 def _empty_accumulator():
@@ -82,10 +96,17 @@ def _merge_accumulator(dst, src):
     dst["cb_missing"] += src["cb_missing"]
 
 
-def _process_chrom(args):
-    """Worker: process all reads in one contig, return an accumulator."""
-    (bam_path, chrom, gene_index, gene_records, polya_index,
-     cov_threshold, min_mapq, cb_tag) = args
+def _process_chrom(chrom):
+    """Worker: process all reads in one contig, return an accumulator. Reads
+    its inputs from the module-level _WORKER dict (set by the parent before
+    forking the pool)."""
+    bam_path      = _WORKER["bam_path"]
+    gene_index    = _WORKER["gene_index"]
+    gene_records  = _WORKER["gene_records"]
+    polya_index   = _WORKER["polya_index"]
+    cov_threshold = _WORKER["cov_threshold"]
+    min_mapq      = _WORKER["min_mapq"]
+    cb_tag        = _WORKER["cb_tag"]
 
     acc = _empty_accumulator()
     try:
@@ -169,10 +190,16 @@ def _process_chrom(args):
     return acc
 
 
-def _list_contigs(bam_path):
+def _populated_contigs(bam_path):
+    """Return contigs with mapped > 0 according to the BAM index. Falls back
+    to the full reference list if the index lacks per-contig stats."""
     bam = pysam.AlignmentFile(bam_path, "rb")
     try:
-        return list(bam.references)
+        try:
+            stats = bam.get_index_statistics()
+            return [s.contig for s in stats if s.mapped > 0]
+        except (AttributeError, ValueError):
+            return list(bam.references)
     finally:
         bam.close()
 
@@ -180,37 +207,46 @@ def _list_contigs(bam_path):
 def analyse_bam(bam_path, gene_index, gene_records, polya_index,
                 cov_threshold, min_mapq, threads=1, cb_tag=None,
                 cb_probe_reads=10_000):
-    """Process a BAM in parallel by contig. Returns a merged accumulator and a
-    results dict matching the v0.1 JSON schema.
+    """Process a BAM in parallel by contig. Returns a results dict matching
+    the v0.1 JSON schema.
 
-    If cb_tag is given but the first `cb_probe_reads` reads lack it, per-cell
-    tracking is silently disabled for all workers (a warning is logged).
+    Empty contigs (mapped=0 in the BAM index) are skipped. With threads > 1,
+    the pool is forked from a parent that has placed the gene/polyA indices
+    in module-level globals, so workers inherit them via copy-on-write rather
+    than receive them through pickle.
     """
 
     probed_cb_tag = cb_tag
     if cb_tag is not None:
         probed_cb_tag = _probe_cb_tag(bam_path, cb_tag, cb_probe_reads)
 
-    contigs = _list_contigs(bam_path)
-    log.info("Analysing %d contigs with %d worker(s)", len(contigs), threads)
+    contigs = _populated_contigs(bam_path)
+    log.info("Analysing %d populated contigs with %d worker(s)",
+             len(contigs), threads)
+
+    _WORKER["bam_path"]      = bam_path
+    _WORKER["gene_index"]    = gene_index
+    _WORKER["gene_records"]  = gene_records
+    _WORKER["polya_index"]   = polya_index
+    _WORKER["cov_threshold"] = cov_threshold
+    _WORKER["min_mapq"]      = min_mapq
+    _WORKER["cb_tag"]        = probed_cb_tag
 
     merged = _empty_accumulator()
 
-    worker_args = [
-        (bam_path, c, gene_index, gene_records, polya_index,
-         cov_threshold, min_mapq, probed_cb_tag)
-        for c in contigs
-    ]
-
-    if threads <= 1:
-        for wa in worker_args:
-            acc = _process_chrom(wa)
-            _merge_accumulator(merged, acc)
-    else:
-        ctx = mp.get_context("fork")
-        with ctx.Pool(processes=threads) as pool:
-            for acc in pool.imap_unordered(_process_chrom, worker_args):
+    try:
+        if threads <= 1:
+            for chrom in contigs:
+                acc = _process_chrom(chrom)
                 _merge_accumulator(merged, acc)
+        else:
+            ctx = mp.get_context("fork")
+            with ctx.Pool(processes=threads) as pool:
+                for acc in pool.imap_unordered(_process_chrom, contigs):
+                    _merge_accumulator(merged, acc)
+    finally:
+        for k in _WORKER:
+            _WORKER[k] = None
 
     if cb_tag is not None and probed_cb_tag is None:
         log.warning("Cell barcode tag %r not found in first %d reads; "

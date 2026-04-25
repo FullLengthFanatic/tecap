@@ -6,7 +6,6 @@ import os
 import pysam
 import pytest
 
-
 CONTIG      = "chr_test"
 CONTIG_LEN  = 25000
 

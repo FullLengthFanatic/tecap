@@ -1,7 +1,6 @@
 """End-to-end CLI smoke tests via subprocess."""
 
 import json
-import os
 import subprocess
 import sys
 

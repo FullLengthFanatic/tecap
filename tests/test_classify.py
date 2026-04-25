@@ -20,7 +20,6 @@ def _find_gene(read, gene_index, gene_records):
     best_gid, best_ovlp = None, 0
     for iv in hits:
         gid = iv.data
-        rec = gene_records[gid]
         ovlp = (min(read.reference_end, iv.end) -
                 max(read.reference_start, iv.begin))
         if ovlp > best_ovlp:

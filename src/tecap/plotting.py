@@ -4,14 +4,20 @@ import logging
 import os
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
 from tecap.constants import (
-    CATEGORIES, CAPTURED, MECH_A_CORRECT,
-    LABELS_SHORT, COLORS, UTR_BIN_LABELS,
-    BUCKETS, BUCKET_COLORS,
+    BUCKET_COLORS,
+    BUCKETS,
+    CAPTURED,
+    CATEGORIES,
+    COLORS,
+    LABELS_SHORT,
+    MECH_A_CORRECT,
+    UTR_BIN_LABELS,
 )
 
 log = logging.getLogger(__name__)

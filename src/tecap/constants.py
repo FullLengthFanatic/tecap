@@ -2,7 +2,6 @@
 
 import numpy as np
 
-
 CAPTURED              = "Captured (>=50%)"
 MECH_A_CORRECT        = "MechA-correct: in TE UTR, at polyA site, too short"
 MECH_A_INTERNAL_UTR   = "MechA-internalUTR: in TE UTR, no polyA site"

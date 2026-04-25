@@ -1,8 +1,15 @@
 """Per-read classification into the nine mechanism buckets."""
 
 from tecap.constants import (
-    CAPTURED, MECH_A_CORRECT, MECH_A_INTERNAL_UTR, INTERNAL_PRIME_TE_CDS,
-    MECH_A_NO_CDS, MECH_B_APA, MECH_B_EXON, MECH_B_ASPECI, MECH_C,
+    CAPTURED,
+    INTERNAL_PRIME_TE_CDS,
+    MECH_A_CORRECT,
+    MECH_A_INTERNAL_UTR,
+    MECH_A_NO_CDS,
+    MECH_B_APA,
+    MECH_B_ASPECI,
+    MECH_B_EXON,
+    MECH_C,
 )
 from tecap.polya import hits_polya, in_upstream_exon
 

@@ -10,7 +10,6 @@ import numpy as np
 from tecap import __version__
 from tecap.constants import CATEGORIES, MECH_A_CORRECT, MECH_B_APA, UTR_BIN_LABELS
 
-
 PLATFORMS_OK = ("cdna-pacbio", "cdna-ont")
 PLATFORMS_REFUSED = {
     "drna-ont": (
@@ -100,6 +99,20 @@ def _build_parser():
     pcmp.add_argument("--out-dir", default=".")
     pcmp.add_argument("--verbose", action="store_true")
 
+    # download-atlas
+    pdl = sub.add_parser("download-atlas",
+                         help="Download PolyASite 3.0 (and optionally GENCODE GTF)")
+    pdl.add_argument("--genome", choices=("GRCh38", "GRCm39"), required=True)
+    pdl.add_argument("--out-dir", default=".")
+    pdl.add_argument("--url", default=None,
+                     help="Override polyA atlas URL (otherwise built-in).")
+    pdl.add_argument("--expected-sha256", default=None,
+                     help="Pin a known SHA256 to verify reproducibility.")
+    pdl.add_argument("--gtf-version", type=int, default=None,
+                     help="If set, also fetch matching GENCODE GTF release "
+                          "(human integer e.g. 45, mouse integer e.g. 35).")
+    pdl.add_argument("--verbose", action="store_true")
+
     return parser
 
 
@@ -107,6 +120,7 @@ def _cmd_classify(args):
     from tecap.bam import analyse_bam, per_cell_summary, write_per_gene_table
     from tecap.gtf import build_gene_index
     from tecap.io import write_json
+    from tecap.multiqc import build_mqc_payload, write_mqc_json
     from tecap.plotting import plot_single
     from tecap.polya import build_polya_index
 
@@ -178,6 +192,10 @@ def _cmd_classify(args):
 
     write_json(json_path, summary)
     log.info("JSON: %s", json_path)
+
+    mqc_path = os.path.join(args.out_dir, f"{args.sample}_tecap_mqc.json")
+    write_mqc_json(mqc_path, build_mqc_payload(args.sample, results, summary))
+    log.info("MultiQC: %s", mqc_path)
 
     plot_single(results, args.sample, args.out_dir, args.coverage_threshold)
 
@@ -272,6 +290,23 @@ def _cmd_compare(args):
     run_compare(args.mode, inputs, args.out_dir)
 
 
+def _cmd_download_atlas(args):
+    from tecap.download import fetch_gencode_gtf, fetch_polya_atlas
+
+    log = logging.getLogger("tecap.download")
+    bed_path, bed_sha = fetch_polya_atlas(
+        genome=args.genome, out_dir=args.out_dir,
+        expected_sha256=args.expected_sha256, url=args.url,
+    )
+    log.info("PolyASite atlas: %s (sha256=%s)", bed_path, bed_sha)
+
+    if args.gtf_version is not None:
+        gtf_path, gtf_sha = fetch_gencode_gtf(
+            genome=args.genome, version=args.gtf_version, out_dir=args.out_dir,
+        )
+        log.info("GENCODE GTF: %s (sha256=%s)", gtf_path, gtf_sha)
+
+
 def main(argv=None):
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -287,6 +322,8 @@ def main(argv=None):
         _cmd_basecomp(args)
     elif args.cmd == "compare":
         _cmd_compare(args)
+    elif args.cmd == "download-atlas":
+        _cmd_download_atlas(args)
     else:
         parser.error(f"Unknown command: {args.cmd}")
 

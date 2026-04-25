@@ -1,6 +1,5 @@
 """Tests for BAM-level orchestration: accumulator invariants + thread equivalence."""
 
-from collections import Counter
 
 from tecap.bam import analyse_bam
 from tecap.gtf import build_gene_index

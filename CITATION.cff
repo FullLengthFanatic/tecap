@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use tecap in published work, please cite it using these metadata."
+title: "tecap: 3' terminal exon capture diagnostics for long-read scRNA-seq"
+abstract: >-
+  tecap classifies long-read alignments by where their 3' end lands relative to
+  the terminal exon (TE), its UTR, and a polyA site atlas. It decomposes
+  capture failures into nine mechanism buckets and measures reference base
+  composition downstream of each cleavage site to distinguish classic A-tract
+  internal priming from moderate-A priming characteristic of saturating
+  in-solution oligo-dT.
+type: software
+authors:
+  - family-names: Picelli
+    given-names: Simone
+    email: simone.picelli@iob.ch
+    affiliation: "Institute of Molecular and Clinical Ophthalmology Basel (IOB)"
+license: MIT
+repository-code: "https://github.com/FullLengthFanatic/tecap"
+keywords:
+  - scRNA-seq
+  - long-read
+  - PacBio
+  - Iso-Seq
+  - Kinnex
+  - ONT
+  - polyA
+  - internal-priming
+  - APA
+  - terminal-exon
+version: 0.1.0
+date-released: 2026-04-24

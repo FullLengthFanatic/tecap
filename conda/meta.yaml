@@ -1,0 +1,50 @@
+{% set name = "tecap" %}
+{% set version = "0.2.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://github.com/FullLengthFanatic/{{ name }}/archive/refs/tags/v{{ version }}.tar.gz
+  sha256: 0000000000000000000000000000000000000000000000000000000000000000
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . --no-deps --no-build-isolation -vv
+  entry_points:
+    - tecap = tecap.cli:main
+
+requirements:
+  host:
+    - python >=3.9
+    - pip
+    - hatchling >=1.18
+  run:
+    - python >=3.9
+    - pysam >=0.22
+    - intervaltree >=3.1
+    - matplotlib-base >=3.5
+    - numpy >=1.22
+
+test:
+  imports:
+    - tecap
+  commands:
+    - tecap --version
+    - tecap classify --help
+    - tecap basecomp --help
+    - tecap compare --help
+
+about:
+  home: https://github.com/FullLengthFanatic/tecap
+  summary: 3' terminal exon capture diagnostics for long-read scRNA-seq
+  license: MIT
+  license_file: LICENSE
+  doc_url: https://github.com/FullLengthFanatic/tecap
+  dev_url: https://github.com/FullLengthFanatic/tecap
+
+extra:
+  recipe-maintainers:
+    - FullLengthFanatic
