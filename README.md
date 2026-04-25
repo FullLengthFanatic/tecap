@@ -1,6 +1,7 @@
 # tecap
 
 [![tests](https://github.com/FullLengthFanatic/tecap/actions/workflows/test.yml/badge.svg)](https://github.com/FullLengthFanatic/tecap/actions/workflows/test.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19762736.svg)](https://doi.org/10.5281/zenodo.19762736)
 
 3' terminal exon capture diagnostics for long-read single-cell RNA-seq.
 
