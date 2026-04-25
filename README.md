@@ -11,7 +11,7 @@ Designed for PacBio Iso-Seq / Kinnex and Oxford Nanopore cDNA BAMs. Direct-RNA s
 ## Install
 
 ```bash
-pip install git+https://github.com/FullLengthFanatic/tecap@v0.1.0
+pip install git+https://github.com/FullLengthFanatic/tecap@v0.2.0
 ```
 
 Development install:
