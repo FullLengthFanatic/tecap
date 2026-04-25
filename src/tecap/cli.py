@@ -102,7 +102,12 @@ def _build_parser():
     # download-atlas
     pdl = sub.add_parser("download-atlas",
                          help="Download PolyASite 3.0 (and optionally GENCODE GTF)")
-    pdl.add_argument("--genome", choices=("GRCh38", "GRCm39"), required=True)
+    pdl.add_argument(
+        "--genome", choices=("GRCh38", "GRCm38", "GRCm39"), required=True,
+        help="GRCh38 (PolyASite v3.0 + matching GENCODE), "
+             "GRCm38 (PolyASite v2.0 only — v3.0 mouse not published), "
+             "GRCm39 (GENCODE only — no matching PolyASite atlas)."
+    )
     pdl.add_argument("--out-dir", default=".")
     pdl.add_argument("--url", default=None,
                      help="Override polyA atlas URL (otherwise built-in).")

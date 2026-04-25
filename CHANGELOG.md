@@ -1,5 +1,17 @@
 # Changelog
 
+## [unreleased]
+
+### Fixed
+- `download-atlas`: PolyASite URLs in `download.py` 404'd against the live
+  service. Replaced with the actual paths under
+  `polyasite.unibas.ch/download/atlas/{2.0,3.0}/...`. Human is v3.0
+  (GENCODE_42), mouse is v2.0 (GRCm38.96) — PolyASite v3.0 mouse is not
+  published.
+- `--genome` now accepts `{GRCh38, GRCm38, GRCm39}` to reflect the asymmetric
+  PolyASite/GENCODE coverage (GRCh38 has both; GRCm38 has PolyASite only;
+  GRCm39 has GENCODE only).
+
 ## [0.2.0] — 2026-04-25
 
 ### Performance

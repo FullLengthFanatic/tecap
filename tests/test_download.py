@@ -26,7 +26,7 @@ def test_fetch_polya_atlas_writes_and_returns_sha(monkeypatch, tmp_path):
 
 def test_fetch_polya_atlas_unknown_genome_raises(tmp_path):
     with pytest.raises(ValueError, match="No built-in URL"):
-        download.fetch_polya_atlas("GRCm38", str(tmp_path))
+        download.fetch_polya_atlas("Sscrofa11", str(tmp_path))
 
 
 def test_fetch_polya_atlas_sha_mismatch(monkeypatch, tmp_path):
@@ -39,7 +39,7 @@ def test_fetch_polya_atlas_sha_mismatch(monkeypatch, tmp_path):
 
 def test_fetch_polya_atlas_skips_existing(monkeypatch, tmp_path):
     payload = b"existing"
-    target = tmp_path / "atlas.clusters.3.0.GRCh38.bed.gz"
+    target = tmp_path / "atlas.clusters.3.0.GRCh38.GENCODE_42.bed.gz"
     target.write_bytes(payload)
 
     called = {"n": 0}

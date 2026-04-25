@@ -13,8 +13,14 @@ log = logging.getLogger(__name__)
 
 
 POLYA_URLS = {
-    "GRCh38": "https://polyasite.unibas.ch/download/atlas.clusters.3.0.GRCh38.bed.gz",
-    "GRCm39": "https://polyasite.unibas.ch/download/atlas.clusters.3.0.GRCm39.bed.gz",
+    "GRCh38": (
+        "https://polyasite.unibas.ch/download/atlas/3.0/"
+        "GRCh38.GENCODE_42/atlas.clusters.3.0.GRCh38.GENCODE_42.bed.gz"
+    ),
+    "GRCm38": (
+        "https://polyasite.unibas.ch/download/atlas/2.0/"
+        "GRCm38.96/atlas.clusters.2.0.GRCm38.96.bed.gz"
+    ),
 }
 
 
@@ -89,13 +95,18 @@ def fetch_gencode_gtf(genome, version, out_dir, expected_sha256=None):
     """Fetch a GENCODE GTF for human (GRCh38) or mouse (GRCm39).
 
     `version` is the integer release number, e.g. 45 for human, 35 for mouse.
+    GRCm38 is unsupported here — current GENCODE mouse releases (M26+) are on
+    GRCm39. If you need a GRCm38 GTF, fetch GENCODE M25 manually.
     """
     if genome == "GRCh38":
         url = GENCODE_HUMAN_TEMPLATE.format(ver=version)
     elif genome == "GRCm39":
         url = GENCODE_MOUSE_TEMPLATE.format(ver=version)
     else:
-        raise ValueError(f"GENCODE not configured for genome={genome!r}")
+        raise ValueError(
+            f"GENCODE not configured for genome={genome!r}. "
+            f"Supported: GRCh38, GRCm39. (GRCm38 GENCODE is M25-and-earlier; fetch manually.)"
+        )
 
     os.makedirs(out_dir, exist_ok=True)
     fname = os.path.basename(url)
