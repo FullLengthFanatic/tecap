@@ -146,6 +146,17 @@ Cross-sample:
 - `comparison_terminal_exon.png` — grouped bars across samples.
 - `comparison_basecomp.png` — per-bucket histogram overlays.
 
+### Example plots
+
+Outputs from a 4-sample run on `tecap compare`: 10x Kinnex
+(`10x_FL_v02_full`), BD Rhapsody Kinnex (`BD46_FS_SEQ`), PacBio Kinnex
+bulk cerebellum, PacBio Kinnex bulk heart. All human GRCh38, all
+sequenced as FL Kinnex / MAS-ISO / PacBio HiFi.
+
+![Terminal-exon bucket fractions and UTR-bin MechA-correct rates across the four samples.](docs/example_plots/comparison_terminal_exon.png)
+
+![%A in the 20 nt reference window downstream of each cleavage site, per bucket, for the four samples. Grey band: 30-50% A (moderate-A priming). Dashed line: 60% A (classical A-tract priming). MechB_aspecific shows the chemistry split: 10x and BD Rhapsody enriched in the grey band, bulk Iso-Seq enriched past the dashed line.](docs/example_plots/comparison_basecomp.png)
+
 HTML report (`tecap report`):
 - Self-contained `.html` per sample (and per comparison) with embedded
   PNGs, executive summary tiles, mechanism legend, per-bucket tables,
