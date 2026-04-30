@@ -56,6 +56,93 @@ def _add_common_indexing_args(p):
     p.add_argument("--verbose", action="store_true")
 
 
+def _add_reference_args(p):
+    """References can come from explicit paths or from --genome auto-download."""
+    p.add_argument("--gtf", default=None,
+                   help="Path to GENCODE GTF (.gz OK). If omitted, supply "
+                        "--genome and --gtf-version to auto-fetch.")
+    p.add_argument("--polya-sites", default=None,
+                   help="Path to PolyASite atlas BED (.gz OK). If omitted, "
+                        "supply --genome to auto-fetch.")
+    p.add_argument("--genome", choices=("GRCh38", "GRCm38", "GRCm39"), default=None,
+                   help="Auto-fetch missing references for this genome. "
+                        "GRCh38: PolyASite v3.0 + GENCODE. "
+                        "GRCm38: PolyASite v2.0 only (no GENCODE template). "
+                        "GRCm39: GENCODE only (no PolyASite atlas).")
+    p.add_argument("--gtf-version", type=int, default=None,
+                   help="GENCODE release integer (e.g. 45 for human, 35 for "
+                        "mouse). Required with --genome when --gtf is missing.")
+    p.add_argument("--ref-cache", default=None,
+                   help="Reference cache directory. Default: "
+                        "$XDG_CACHE_HOME/tecap or ~/.cache/tecap.")
+
+
+def _default_ref_cache():
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    return os.path.join(base, "tecap")
+
+
+def _resolve_references(args):
+    """Mutate args in place so .gtf and .polya_sites are valid file paths.
+
+    Behaviour:
+    - Explicit paths win.
+    - If --genome is given, fetch missing pieces into <ref-cache>/<genome>/.
+    - Otherwise, error out with a message pointing at both options.
+    """
+    from tecap.download import fetch_gencode_gtf, fetch_polya_atlas
+
+    log = logging.getLogger("tecap.refs")
+
+    cache_root = args.ref_cache or _default_ref_cache()
+    cache_dir = (os.path.join(cache_root, args.genome) if args.genome
+                 else cache_root)
+
+    if args.polya_sites is None:
+        if args.genome is None:
+            sys.stderr.write(
+                "ERROR: --polya-sites is required, or pass --genome to "
+                "auto-fetch a PolyASite atlas.\n"
+            )
+            sys.exit(2)
+        if args.genome == "GRCm39":
+            sys.stderr.write(
+                "ERROR: PolyASite has no GRCm39 atlas. Pass --polya-sites "
+                "explicitly, or use --genome GRCm38 for PolyASite v2.0.\n"
+            )
+            sys.exit(2)
+        log.info("Auto-fetching PolyASite atlas for %s -> %s",
+                 args.genome, cache_dir)
+        path, _ = fetch_polya_atlas(genome=args.genome, out_dir=cache_dir)
+        args.polya_sites = path
+
+    if args.gtf is None:
+        if args.genome is None:
+            sys.stderr.write(
+                "ERROR: --gtf is required, or pass --genome and --gtf-version "
+                "to auto-fetch a GENCODE GTF.\n"
+            )
+            sys.exit(2)
+        if args.genome == "GRCm38":
+            sys.stderr.write(
+                "ERROR: GENCODE template is not configured for GRCm38 "
+                "(M25-and-earlier). Fetch the GTF manually and pass --gtf.\n"
+            )
+            sys.exit(2)
+        if args.gtf_version is None:
+            sys.stderr.write(
+                "ERROR: --gtf-version is required with --genome when --gtf "
+                "is not given (e.g. --gtf-version 45 for human, 35 for mouse).\n"
+            )
+            sys.exit(2)
+        log.info("Auto-fetching GENCODE GTF v%d for %s -> %s",
+                 args.gtf_version, args.genome, cache_dir)
+        path, _ = fetch_gencode_gtf(
+            genome=args.genome, version=args.gtf_version, out_dir=cache_dir,
+        )
+        args.gtf = path
+
+
 def _build_parser():
     parser = argparse.ArgumentParser(
         prog="tecap",
@@ -67,8 +154,7 @@ def _build_parser():
     # classify
     pc = sub.add_parser("classify", help="Classify reads into mechanism buckets")
     pc.add_argument("--bam", required=True)
-    pc.add_argument("--gtf", required=True)
-    pc.add_argument("--polya-sites", required=True)
+    _add_reference_args(pc)
     pc.add_argument("--sample", default="sample")
     pc.add_argument("--out-dir", default=".")
     pc.add_argument("--cell-barcode-tag", default=None,
@@ -81,8 +167,7 @@ def _build_parser():
     # basecomp
     pb = sub.add_parser("basecomp", help="Downstream base composition analysis")
     pb.add_argument("--bam", required=True)
-    pb.add_argument("--gtf", required=True)
-    pb.add_argument("--polya-sites", required=True)
+    _add_reference_args(pb)
     pb.add_argument("--fasta", required=True,
                     help="Indexed FASTA (gz OK with .fai + .gzi)")
     pb.add_argument("--sample", default="sample")
@@ -117,6 +202,33 @@ def _build_parser():
                      help="If set, also fetch matching GENCODE GTF release "
                           "(human integer e.g. 45, mouse integer e.g. 35).")
     pdl.add_argument("--verbose", action="store_true")
+
+    # explain
+    pex = sub.add_parser("explain",
+                         help="Print mechanism / bucket definitions")
+    pex.add_argument("--mechanism", default=None,
+                     help="Print one mechanism (match by short name or full "
+                          "category string). If omitted, print all.")
+    pex.add_argument("--scope", choices=("classify", "basecomp", "all"),
+                     default="all",
+                     help="Which glossary to print (default: all).")
+    pex.add_argument("--format", choices=("text", "json"), default="text")
+    pex.add_argument("--verbose", action="store_true")
+
+    # report
+    prp = sub.add_parser("report",
+                         help="Render a self-contained HTML report from JSONs")
+    prp.add_argument("--classify-json", required=True,
+                     help="Comma-separated classify JSON path(s).")
+    prp.add_argument("--basecomp-json", default=None,
+                     help="Comma-separated basecomp JSON path(s); aligned by "
+                          "order with --classify-json.")
+    prp.add_argument("--out-html", required=True,
+                     help="Path for the rendered HTML file.")
+    prp.add_argument("--out-dir", default=None,
+                     help="Where to write any regenerated PNGs "
+                          "(default: alongside the JSONs).")
+    prp.add_argument("--verbose", action="store_true")
 
     return parser
 
@@ -312,6 +424,42 @@ def _cmd_download_atlas(args):
         log.info("GENCODE GTF: %s (sha256=%s)", gtf_path, gtf_sha)
 
 
+def _cmd_explain(args):
+    from tecap.explain import render
+
+    out = render(scope=args.scope, mechanism=args.mechanism, fmt=args.format)
+    sys.stdout.write(out)
+    if not out.endswith("\n"):
+        sys.stdout.write("\n")
+
+
+def _cmd_report(args):
+    from tecap.report import build_compare_report, build_single_report
+
+    classify_paths = [p.strip() for p in args.classify_json.split(",") if p.strip()]
+    basecomp_paths = ([p.strip() for p in args.basecomp_json.split(",") if p.strip()]
+                      if args.basecomp_json else None)
+
+    out_dir = args.out_dir or os.path.dirname(os.path.abspath(args.out_html))
+    os.makedirs(out_dir, exist_ok=True)
+
+    if len(classify_paths) == 1:
+        bc = basecomp_paths[0] if basecomp_paths else None
+        html = build_single_report(classify_paths[0], bc, out_dir=out_dir)
+    else:
+        if basecomp_paths and len(basecomp_paths) != len(classify_paths):
+            sys.stderr.write(
+                f"ERROR: --basecomp-json count ({len(basecomp_paths)}) must "
+                f"match --classify-json count ({len(classify_paths)}).\n"
+            )
+            sys.exit(2)
+        html = build_compare_report(classify_paths, basecomp_paths, out_dir=out_dir)
+
+    with open(args.out_html, "w") as f:
+        f.write(html)
+    logging.getLogger("tecap.report").info("HTML: %s", args.out_html)
+
+
 def main(argv=None):
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -320,6 +468,7 @@ def main(argv=None):
 
     if args.cmd in ("classify", "basecomp"):
         _check_platform(args.platform)
+        _resolve_references(args)
 
     if args.cmd == "classify":
         _cmd_classify(args)
@@ -329,6 +478,10 @@ def main(argv=None):
         _cmd_compare(args)
     elif args.cmd == "download-atlas":
         _cmd_download_atlas(args)
+    elif args.cmd == "explain":
+        _cmd_explain(args)
+    elif args.cmd == "report":
+        _cmd_report(args)
     else:
         parser.error(f"Unknown command: {args.cmd}")
 

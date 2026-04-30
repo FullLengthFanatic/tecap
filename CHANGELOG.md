@@ -1,6 +1,61 @@
 # Changelog
 
-## [unreleased]
+## [0.3.0] — 2026-04-30
+
+Readability, reporting, and ergonomics. JSON schema unchanged.
+
+### Added
+- Single source of truth for mechanism / bucket prose in
+  `tecap/constants.py` (`MECHANISM_DEFINITIONS`, `BUCKET_DEFINITIONS`,
+  `PLOT_CAPTIONS`). README, HTML report, plot captions, and `tecap explain`
+  all render from these dicts.
+- `tecap explain [--mechanism NAME] [--scope classify|basecomp|all]
+  [--format text|json]` — print the glossary at the terminal.
+- `tecap report --classify-json A.json[,B.json,...]
+  [--basecomp-json ...] --out-html OUT.html` — single self-contained HTML
+  per sample, or cross-sample comparison. Embeds PNGs as base64. No JS,
+  no external CSS, no CDN.
+- `tecap classify` / `basecomp` accept `--genome {GRCh38,GRCm38,GRCm39}`
+  to auto-fetch missing references via the existing
+  `fetch_polya_atlas` / `fetch_gencode_gtf`. Adds `--gtf-version` and
+  `--ref-cache` (default `$XDG_CACHE_HOME/tecap` / `~/.cache/tecap`).
+  Explicit `--polya-sites` / `--gtf` still win.
+
+### Changed
+- `comparison_terminal_exon.png` panel 1 is now horizontal grouped bars,
+  one row per category, samples grouped within each row. Long category
+  names are readable; the previous overlapped vertical x-axis labels are
+  gone.
+- `comparison_terminal_exon.png` panels 2 and 3 (UTR-bin rates) switched
+  from grouped vertical bars to line+marker plots, one polyline per
+  sample. Bars hid samples with low MechA-correct rates at N>=4; lines
+  scale to any sample count. Caption rewritten to describe left/middle/
+  right panels (was "top/bottom").
+- `comparison_basecomp.png` switched from side-by-side bars to step-line
+  overlay, one polyline per sample per bucket, with a single
+  figure-level sample legend. Side-by-side bars were unreadable at
+  N>=4. Figure size scales with sample count.
+- All four plotting functions now draw a figure-level caption explaining
+  what the plot shows.
+- Basecomp PNGs now carry an explicit figure-level legend for the grey
+  band ("30-50% A: moderate-A priming") and the dashed line
+  (">=60% A: classical A-tract"). Per-bucket subplot titles include the
+  bucket's interpretation.
+- Moderate-A priming attribution updated based on a 4-sample comparison
+  (10x Kinnex, BD Rhapsody Kinnex, PacBio Kinnex bulk cerebellum, PacBio
+  Kinnex bulk heart, all human GRCh38). MechB_aspecific frac[30,50]:
+  10x 0.36, BD46 0.25, Kinnex cerebellum 0.16, Kinnex heart 0.16. Bulk
+  Iso-Seq samples instead show heavy classical-A enrichment (frac>=60
+  ~ 0.47). The moderate-A signature is characteristic of saturating-
+  local-concentration oligo-dT chemistries: 10x GEM droplets (gel bead
+  dissolves and releases oligo-dT into a ~1 nL droplet) and BD Rhapsody
+  capture beads (oligo-dT density at the bead surface). Free oligo-dT
+  at standard concentrations (Iso-Seq, ~20 µL RT) shows classical-A
+  internal priming instead. The previous attribution to "saturating
+  in-solution oligo-dT" generally was too broad: 10x and Iso-Seq both
+  use in-solution oligo-dT, but only 10x's droplet volume creates the
+  saturating local concentration that drives moderate-A priming.
+  Captions, README, CITATION.cff, and .zenodo.json updated.
 
 ### Fixed
 - `download-atlas`: PolyASite URLs in `download.py` 404'd against the live
@@ -11,6 +66,29 @@
 - `--genome` now accepts `{GRCh38, GRCm38, GRCm39}` to reflect the asymmetric
   PolyASite/GENCODE coverage (GRCh38 has both; GRCm38 has PolyASite only;
   GRCm39 has GENCODE only).
+
+### Known limitations / open questions
+- The 4-sample chemistry comparison covers droplet-scale (10x), bead-
+  surface (BD Rhapsody), and bulk-tube (Kinnex Iso-Seq, ~20 µL RT)
+  oligo-dT environments. It does **not** cover plate-scale RT (1-10 µL
+  per well, in-solution oligo-dT, e.g. Smart-seq2 / Smart-seq3 /
+  FLASH-seq), which would test whether the moderate-A signature tracks
+  reaction-volume scale or chemistry lineage. FLASH-seq amplification
+  (used in BD Rhapsody) is a Smart-seq descendant, so plate Smart-seq
+  could plausibly look like BD46 (chemistry-driven moderate-A) or like
+  Iso-Seq (scale-driven, no moderate-A).
+- This gap exists because no clean public **human** Smart-seq2/3 +
+  PacBio HiFi dataset was findable as of 2026-04-29: PacBio's
+  `Kinnex-single-cell-RNA` and `MAS-Seq` buckets are 10x-only;
+  HIT-scISOseq corneal limbus is Smart-seq2-derived but not directly
+  downloadable; Al'Khafaji TIL T cell data (dbGaP phs003200) is
+  10x-derived. Mouse Smart-seq2 + Iso-Seq exists (SRP225196) but
+  cross-species adds noise on top of PolyASite v2.0 cluster-type
+  filter mismatches.
+- Follow-up paths for v0.4: (a) request HIT-scISOseq raw BAMs from
+  Zheng/Chen et al. (Sun Yat-sen University); (b) watch PacBio's
+  public bucket for plate Smart-seq deposits; (c) generate an in-house
+  Smart-seq3 + Kinnex library if the question stays open.
 
 ## [0.2.0] — 2026-04-25
 

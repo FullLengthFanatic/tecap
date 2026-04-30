@@ -6,8 +6,9 @@ abstract: >-
   the terminal exon (TE), its UTR, and a polyA site atlas. It decomposes
   capture failures into nine mechanism buckets and measures reference base
   composition downstream of each cleavage site to distinguish classic A-tract
-  internal priming from moderate-A priming characteristic of saturating
-  in-solution oligo-dT.
+  internal priming from moderate-A priming characteristic of
+  saturating-local-concentration oligo-dT chemistries (10x GEM droplets,
+  BD Rhapsody capture beads).
 type: software
 authors:
   - family-names: Picelli
@@ -27,5 +28,5 @@ keywords:
   - internal-priming
   - APA
   - terminal-exon
-version: 0.2.0
-date-released: 2026-04-25
+version: 0.3.0
+date-released: 2026-04-30
