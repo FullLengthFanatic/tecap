@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.1] — 2026-05-01
+
+CLI ergonomics. JSON schema unchanged.
+
+### Changed
+- `tecap report` now accepts space-separated paths for
+  `--classify-json` and `--basecomp-json` (`nargs="+"`) instead of
+  comma-separated. Commas are legal in POSIX paths, so the comma form
+  was a real ambiguity. The new form matches standard argparse
+  conventions.
+
+### Migration
+- Replace any comma-separated invocation
+  `tecap report --classify-json A.json,B.json --basecomp-json A_bc.json,B_bc.json ...`
+  with space-separated
+  `tecap report --classify-json A.json B.json --basecomp-json A_bc.json B_bc.json ...`.
+
 ## [0.3.0] — 2026-04-30
 
 Readability, reporting, and ergonomics. JSON schema unchanged.

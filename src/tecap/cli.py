@@ -218,11 +218,11 @@ def _build_parser():
     # report
     prp = sub.add_parser("report",
                          help="Render a self-contained HTML report from JSONs")
-    prp.add_argument("--classify-json", required=True,
-                     help="Comma-separated classify JSON path(s).")
-    prp.add_argument("--basecomp-json", default=None,
-                     help="Comma-separated basecomp JSON path(s); aligned by "
-                          "order with --classify-json.")
+    prp.add_argument("--classify-json", required=True, nargs="+",
+                     help="One or more classify JSON paths (space-separated).")
+    prp.add_argument("--basecomp-json", default=None, nargs="+",
+                     help="One or more basecomp JSON paths (space-separated); "
+                          "aligned by order with --classify-json.")
     prp.add_argument("--out-html", required=True,
                      help="Path for the rendered HTML file.")
     prp.add_argument("--out-dir", default=None,
@@ -436,9 +436,8 @@ def _cmd_explain(args):
 def _cmd_report(args):
     from tecap.report import build_compare_report, build_single_report
 
-    classify_paths = [p.strip() for p in args.classify_json.split(",") if p.strip()]
-    basecomp_paths = ([p.strip() for p in args.basecomp_json.split(",") if p.strip()]
-                      if args.basecomp_json else None)
+    classify_paths = list(args.classify_json)
+    basecomp_paths = list(args.basecomp_json) if args.basecomp_json else None
 
     out_dir = args.out_dir or os.path.dirname(os.path.abspath(args.out_html))
     os.makedirs(out_dir, exist_ok=True)

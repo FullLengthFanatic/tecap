@@ -134,6 +134,37 @@ def test_report_subcommand(synthetic_fixture, tmp_path):
     assert "Mechanism legend" in text
 
 
+def test_report_multi_sample(synthetic_fixture, tmp_path):
+    """Multi-sample report accepts space-separated --classify-json paths."""
+    out_a = tmp_path / "out_a"
+    out_b = tmp_path / "out_b"
+    out_a.mkdir()
+    out_b.mkdir()
+    for sample, out in (("A", out_a), ("B", out_b)):
+        res = _run_cli([
+            "classify",
+            "--bam", synthetic_fixture["bam"],
+            "--gtf", synthetic_fixture["gtf"],
+            "--polya-sites", synthetic_fixture["polya"],
+            "--sample", sample,
+            "--out-dir", str(out),
+            "--platform", "cdna-pacbio",
+        ])
+        assert res.returncode == 0, res.stderr
+
+    html_path = tmp_path / "compare.html"
+    res = _run_cli([
+        "report",
+        "--classify-json",
+        str(out_a / "A_terminal_exon.json"),
+        str(out_b / "B_terminal_exon.json"),
+        "--out-html", str(html_path),
+    ])
+    assert res.returncode == 0, res.stderr
+    text = html_path.read_text()
+    assert "<html" in text
+
+
 def test_genome_triggers_auto_download(monkeypatch, synthetic_fixture, tmp_path):
     """--genome with no explicit paths should call fetch_polya_atlas /
     fetch_gencode_gtf instead of erroring."""

@@ -106,10 +106,10 @@ tecap report \
     --basecomp-json results/S1_basecomp.json \
     --out-html results/S1_report.html
 
-# Cross-sample HTML report
+# Cross-sample HTML report (space-separated paths)
 tecap report \
-    --classify-json results/A_terminal_exon.json,results/B_terminal_exon.json \
-    --basecomp-json results/A_basecomp.json,results/B_basecomp.json \
+    --classify-json results/A_terminal_exon.json results/B_terminal_exon.json \
+    --basecomp-json results/A_basecomp.json results/B_basecomp.json \
     --out-html results/compare.html
 
 # Print the mechanism glossary
