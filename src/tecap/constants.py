@@ -204,12 +204,12 @@ PLOT_CAPTIONS = {
         "Per-bucket histograms of %A in the {window} nt reference window "
         "immediately downstream of each cleavage site. Grey shading marks the "
         "moderate-A regime (30-50% A); the dashed line marks classical A-tract "
-        "priming (>=60% A). Mispriming buckets enriched in the grey band but "
-        "not past the dashed line are characteristic of saturating-local-"
-        "concentration oligo-dT chemistries (10x GEM droplets, BD Rhapsody "
-        "capture beads); free oligo-dT at standard concentrations (bulk "
-        "Iso-Seq) mis-primes preferentially past the dashed line on classical "
-        "A-tracts."
+        "priming (>=60% A). Enrichment in the grey band reflects priming on "
+        "moderate-A sequence; enrichment past the dashed line reflects "
+        "priming on classical A-tracts. Empirically, single-cell prep "
+        "datasets (10x, BD Rhapsody, ArgenTag, plate FLASH-seq) cluster in "
+        "the grey band; bulk Iso-Seq datasets cluster past the dashed line. "
+        "The biochemical driver of this split is currently uncharacterized."
     ),
     "comparison_basecomp": (
         "Cross-sample %A histograms in the {window} nt window downstream of "

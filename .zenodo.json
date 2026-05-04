@@ -1,6 +1,6 @@
 {
   "title": "tecap: 3' terminal exon capture diagnostics for long-read scRNA-seq",
-  "description": "tecap classifies long-read alignments by where their 3' end lands relative to the terminal exon, its UTR, and a polyA site atlas. It decomposes capture failures into nine mechanism buckets and measures reference base composition downstream of each cleavage site to distinguish classic A-tract internal priming from moderate-A priming characteristic of saturating-local-concentration oligo-dT chemistries (10x GEM droplets, BD Rhapsody capture beads).",
+  "description": "tecap classifies long-read alignments by where their 3' end lands relative to the terminal exon, its UTR, and a polyA site atlas. It decomposes capture failures into nine mechanism buckets and measures reference base composition downstream of each cleavage site, separating classical A-tract internal priming (>=60% A) from moderate-A priming (30-50% A). Empirically the two regimes split single-cell preps from bulk Iso-Seq; the biochemical driver of the split is currently uncharacterized.",
   "license": "MIT",
   "upload_type": "software",
   "access_right": "open",

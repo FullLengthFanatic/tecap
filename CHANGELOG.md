@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.2] — 2026-05-04
+
+Prose-only patch. No code, schema, CLI, or behavior change.
+
+### Changed
+- Removed an unsupported mechanistic attribution from the README,
+  CITATION.cff, .zenodo.json, and the `basecomp` plot caption emitted
+  by `tecap/constants.py`. Earlier wording attributed the moderate-A
+  vs classical-A split to "saturating-local-concentration oligo-dT
+  chemistries (10x GEM droplets, BD Rhapsody capture beads)". That
+  claim is not supported by available bench data: bulk Iso-Seq final
+  oligo-dT is 1.2 µM, in line with FS-ONT and BD Rhapsody, so bulk
+  oligo-dT concentration cannot be the axis driving the split.
+- All retracted prose has been replaced with empirical-only language:
+  single-cell prep datasets (10x, BD Rhapsody, ArgenTag, plate
+  FLASH-seq) cluster in the 30-50% A regime; bulk Iso-Seq datasets
+  cluster past the >=60% A line. The biochemical driver of the split
+  is currently uncharacterized.
+
+### Note on [0.3.0] history
+The `[0.3.0]` block below still contains the original
+saturating-local-concentration prose. That entry is preserved verbatim
+because v0.3.0 / v0.3.1 are already published on GitHub, Zenodo, and
+bioconda; rewriting locked release notes would be misleading. This
+`[0.3.2]` entry documents the retraction.
+
 ## [0.3.1] — 2026-05-01
 
 CLI ergonomics. JSON schema unchanged.
