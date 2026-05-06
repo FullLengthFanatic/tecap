@@ -16,10 +16,13 @@ from tecap.constants import (
     BUCKETS,
     CATEGORIES,
     COLORS,
+    GLOSSARY,
+    HOW_TO_READ_COMPARE,
     MECH_A_CORRECT,
     MECH_B_APA,
     MECHANISM_DEFINITIONS,
     PLOT_CAPTIONS,
+    REPORT_INTRO,
     SCHEMA_VERSION,
 )
 from tecap.io import read_json
@@ -60,6 +63,11 @@ img.plot { max-width: 100%; height: auto; border: 1px solid #ddd;
        background: #f6f8fa; padding: .5em .8em; border-radius: 3px;
        font-size: 0.85em; overflow-x: auto; white-space: pre-wrap;
        word-break: break-all; }
+.intro { background: #f6f8fa; border-left: 4px solid #3498db;
+         padding: 1em 1.2em; border-radius: 4px; margin: 1em 0 1.5em; }
+.howto { background: #fdf6e3; border-left: 4px solid #f39c12;
+         padding: 1em 1.2em; border-radius: 4px; margin: 1em 0 1.5em; }
+.intro p, .howto p { margin: 0; }
 footer { color: #777; font-size: 0.85em; margin-top: 3em;
          border-top: 1px solid #eee; padding-top: 1em; }
 """
@@ -136,6 +144,34 @@ def _bucket_legend_html():
     return (
         "<table><thead><tr><th>Bucket</th><th>What it means</th>"
         "<th>Why it matters</th></tr></thead><tbody>"
+        + "".join(rows) + "</tbody></table>"
+    )
+
+
+def _intro_html(mode):
+    return (
+        f"<section class='intro'><p>{escape(REPORT_INTRO[mode])}</p></section>"
+    )
+
+
+def _how_to_read_html():
+    return (
+        f"<section class='howto'><h2 style='margin-top:0;border:none'>"
+        f"How to read this report</h2>"
+        f"<p>{escape(HOW_TO_READ_COMPARE)}</p></section>"
+    )
+
+
+def _glossary_html():
+    rows = []
+    for term, definition in GLOSSARY:
+        rows.append(
+            f"<tr><td><strong>{escape(term)}</strong></td>"
+            f"<td>{escape(definition)}</td></tr>"
+        )
+    return (
+        "<table><thead><tr><th style='width:8em'>Term</th>"
+        "<th>Definition</th></tr></thead><tbody>"
         + "".join(rows) + "</tbody></table>"
     )
 
@@ -318,6 +354,7 @@ def build_single_report(classify_json, basecomp_json=None, out_dir=None):
 
     parts = [
         f"<h1>tecap report — {escape(sample)}</h1>",
+        _intro_html("single"),
         "<table><tbody>",
         f"<tr><th>Sample</th><td>{escape(sample)}</td></tr>",
         f"<tr><th>Platform</th><td>{escape(summary.get('platform','?'))}</td></tr>",
@@ -366,6 +403,8 @@ def build_single_report(classify_json, basecomp_json=None, out_dir=None):
     parts += [
         "<h2>Run command</h2>",
         f"<pre class='cmd'>{escape(cmd_line)}</pre>",
+        "<h2>Glossary</h2>",
+        _glossary_html(),
     ]
 
     body = "\n".join(parts)
@@ -398,6 +437,8 @@ def build_compare_report(classify_jsons, basecomp_jsons=None, out_dir=None):
 
     parts = [
         f"<h1>tecap comparison report — {escape(', '.join(samples))}</h1>",
+        _intro_html("compare"),
+        _how_to_read_html(),
         "<h2>Mechanism legend</h2>",
         _mechanism_legend_html(),
         "<h2>Mechanism breakdown across samples</h2>",
@@ -424,6 +465,8 @@ def build_compare_report(classify_jsons, basecomp_jsons=None, out_dir=None):
         for s in bc_summaries:
             parts.append(f"<h4>{escape(s.get('sample','?'))}</h4>")
             parts.append(_basecomp_table(s))
+
+    parts += ["<h2>Glossary</h2>", _glossary_html()]
 
     body = "\n".join(parts)
     return _TEMPLATE.substitute(

@@ -135,3 +135,34 @@ def test_compare_report_with_basecomp(tmp_path):
     html = build_compare_report(cpaths, bpaths, out_dir=str(tmp_path))
     assert "Base composition" in html
     assert (tmp_path / "comparison_basecomp.png").exists()
+
+
+def test_single_report_has_intro_and_glossary(tmp_path):
+    cj = tmp_path / "S1_terminal_exon.json"
+    write_json(str(cj), _classify_summary("S1"))
+    html = build_single_report(str(cj))
+
+    assert "class='intro'" in html
+    assert "summarises" in html and "terminal exon capture diagnostics" in html
+    assert "How to read this report" not in html
+    assert "<h2>Glossary</h2>" in html
+    assert "Untranslated region" in html
+    assert "Polyadenylation signal" in html
+
+
+def test_compare_report_has_intro_howto_and_glossary(tmp_path):
+    cpaths = []
+    for s in ("S1", "S2"):
+        p = tmp_path / f"{s}_terminal_exon.json"
+        write_json(str(p), _classify_summary(s))
+        cpaths.append(str(p))
+
+    html = build_compare_report(cpaths, out_dir=str(tmp_path))
+
+    assert "class='intro'" in html
+    assert "compares" in html and "terminal exon capture diagnostics" in html
+    assert "class='howto'" in html
+    assert "How to read this report" in html
+    assert "Each sample is assigned one colour" in html
+    assert "<h2>Glossary</h2>" in html
+    assert "Polyadenylation" in html

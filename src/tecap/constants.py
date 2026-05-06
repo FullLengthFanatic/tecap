@@ -218,3 +218,95 @@ PLOT_CAPTIONS = {
         "protocol-specific mispriming."
     ),
 }
+
+
+# Top-of-page intro paragraph rendered above every report. Tells the
+# reader what the report is, what was measured, and where the input
+# came from. Two variants because single-sample and multi-sample
+# reports answer different questions.
+REPORT_INTRO = {
+    "single": (
+        "This report summarises 3' terminal exon capture diagnostics for one "
+        "long-read RNA-seq sample. Every multi-exon read is classified into "
+        "one of nine mechanism buckets based on where its 3' end falls "
+        "relative to the terminal exon, the 3' UTR, and a polyA cluster atlas. "
+        "Reference base composition in a short window downstream of each "
+        "cleavage site is then summarised per bucket to flag internal-priming "
+        "artefacts. The mechanism legend below names every bucket; the plots "
+        "and tables that follow break the sample down by bucket, by polyA "
+        "hexamer status, and by 3' UTR length."
+    ),
+    "compare": (
+        "This report compares 3' terminal exon capture diagnostics across "
+        "multiple long-read RNA-seq samples. Every multi-exon read in every "
+        "sample is classified into one of nine mechanism buckets based on "
+        "where its 3' end falls relative to the terminal exon, the 3' UTR, "
+        "and a polyA cluster atlas. Reference base composition in a short "
+        "window downstream of each cleavage site is summarised per bucket "
+        "to flag internal-priming artefacts. The plots and tables below put "
+        "the samples side-by-side so that protocol-specific differences "
+        "(capture rate, read length, mispriming pattern) are directly "
+        "comparable. See the 'How to read this report' block before the "
+        "first plot."
+    ),
+}
+
+
+# Reading guide rendered only in multi-sample comparison reports. Tells
+# the reader how to map plot elements (polylines, grouped bars, colors)
+# back to samples, and where to look for what.
+HOW_TO_READ_COMPARE = (
+    "Each sample is assigned one colour, used consistently across every "
+    "plot and table in the report. In the mechanism breakdown plot, the "
+    "left panel is a grouped horizontal bar chart: each row is one of the "
+    "nine mechanism buckets, and within each row there is one bar per "
+    "sample (read top-to-bottom in the same order as the report's title "
+    "line). The middle and right panels of that plot are line charts: "
+    "each polyline is one sample, x-axis is 3' UTR length bin, y-axis is "
+    "the per-bin rate of MechA-correct (middle) or Captured (right). "
+    "Track one colour across all three panels to follow one sample. "
+    "In the basecomp plot, each subplot is one bucket; within a subplot "
+    "each step-line is one sample's %A distribution in the downstream "
+    "window. Per-sample tables under each plot give the underlying "
+    "counts and fractions. Acronyms used throughout (UTR, TE, CDS, APA, "
+    "polyA, oligo-dT, PAS) are defined in the glossary at the end."
+)
+
+
+# Glossary rendered at the bottom of every report. Covers every domain
+# acronym that appears in the legends, captions, or tables. Two-column
+# table; ordered roughly by where the term first appears in the report.
+GLOSSARY = [
+    ("TE",
+     "Terminal exon. The last exon of a transcript, where the 3' UTR "
+     "and the canonical polyA site live. tecap classifies reads by "
+     "where their 3' end lands relative to the TE."),
+    ("UTR",
+     "Untranslated region. The 3' UTR is the part of the terminal "
+     "exon downstream of the stop codon, between the CDS end and the "
+     "polyA site. Most real polyA cleavage happens here."),
+    ("CDS",
+     "Coding sequence. The protein-coding portion of a transcript. "
+     "Reads with 3' end inside the terminal exon's CDS portion (i.e. "
+     "before the UTR begins) are flagged as IP-TE-CDS, a strong "
+     "internal-priming signal."),
+    ("polyA",
+     "Polyadenylation. The 3' processing step that cleaves the pre-mRNA "
+     "and adds a poly(A) tail. tecap uses the PolyASite atlas to know "
+     "where real polyA cleavage clusters are located."),
+    ("PAS",
+     "Polyadenylation signal. The canonical AAUAAA-like hexamer found "
+     "10-30 nt upstream of a real polyA cleavage site. tecap splits "
+     "MechA-correct and MechB-APA reads into PAS+ (cluster carries the "
+     "hexamer) and PAS- (no hexamer) for higher-confidence calling."),
+    ("APA",
+     "Alternative polyadenylation. Production of mRNA isoforms that "
+     "differ in their 3' end through use of upstream polyA sites on "
+     "earlier exons. MechB-APA captures these biological events and "
+     "distinguishes them from internal-priming artefacts."),
+    ("oligo-dT",
+     "A short DNA oligo of consecutive deoxythymidines, used in cDNA "
+     "library prep to capture poly(A)-tailed mRNA. Internal priming "
+     "happens when oligo-dT anneals to A-rich genomic stretches "
+     "instead of the real poly(A) tail."),
+]

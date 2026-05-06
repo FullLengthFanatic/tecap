@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Self-explanatory prose blocks in HTML reports for non-expert
+  readers (manuscript reviewers, conference attendees, collaborators
+  who haven't run tecap themselves). Three additions, sourced from
+  new constants in `tecap/constants.py`:
+  - `REPORT_INTRO`: top-level intro paragraph rendered above every
+    single-sample and multi-sample report. Names what the report is,
+    what was measured, and where the input came from.
+  - `HOW_TO_READ_COMPARE`: reading guide rendered only in
+    multi-sample comparison reports. Maps polylines / grouped bars /
+    colours back to samples.
+  - `GLOSSARY`: two-column glossary table at the bottom of every
+    report. Defines TE, UTR, CDS, polyA, PAS, APA, oligo-dT.
+- New report helpers `_intro_html`, `_how_to_read_html`,
+  `_glossary_html` in `tecap/report.py`. Wired into both
+  `build_single_report` and `build_compare_report`.
+- New CSS classes `.intro` and `.howto` for visually framed prose
+  callouts (matches existing `.tile` styling).
+
 ## [0.3.2] — 2026-05-04
 
 Prose-only patch. No code, schema, CLI, or behavior change.
