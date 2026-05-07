@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.0] — 2026-05-07
 
 ### Added
 - Self-explanatory prose blocks in HTML reports for non-expert
