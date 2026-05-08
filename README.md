@@ -147,14 +147,22 @@ Cross-sample:
 
 ### Example plots
 
-Outputs from a 4-sample run on `tecap compare`: 10x Kinnex
-(`10x_FL_v02_full`), BD Rhapsody Kinnex (`BD46_FS_SEQ`), PacBio Kinnex
-bulk cerebellum, PacBio Kinnex bulk heart. All human GRCh38, all
-sequenced as FL Kinnex / MAS-ISO / PacBio HiFi.
+Two pairwise comparisons rendered with `tecap report`. All samples
+human GRCh38, sequenced as FL Kinnex / MAS-ISO / PacBio HiFi.
 
-![Terminal-exon bucket fractions and UTR-bin MechA-correct rates across the four samples.](docs/example_plots/comparison_terminal_exon.png)
+**Single-cell vs single-cell:** 10x Kinnex (`10x_FL_v02_full`) vs BD
+Rhapsody Kinnex (`BD46_FS_SEQ`).
 
-![%A in the 20 nt reference window downstream of each cleavage site, per bucket, for the four samples. Grey band: 30-50% A (moderate-A priming). Dashed line: 60% A (classical A-tract priming). MechB_aspecific shows an empirical split: single-cell preps (10x, BD Rhapsody) enriched in the grey band, bulk Iso-Seq enriched past the dashed line. The biochemical driver is currently uncharacterized.](docs/example_plots/comparison_basecomp.png)
+![Terminal-exon bucket fractions and UTR-bin MechA-correct rates: 10x vs BD Rhapsody.](docs/example_plots/10x_vs_BD46_terminal_exon.png)
+
+![%A in the 20 nt reference window downstream of cleavage, per bucket: 10x vs BD Rhapsody. Grey band: 30-50% A (moderate-A priming). Dashed line: 60% A (classical A-tract priming). 10x is shifted warmer in the 30-50% A range across most internal-priming buckets; both samples cluster in the grey band, far from the dashed-line regime occupied by bulk Iso-Seq.](docs/example_plots/10x_vs_BD46_basecomp.png)
+
+**Single-cell vs bulk Iso-Seq:** 10x Kinnex vs PacBio Kinnex bulk
+cerebellum.
+
+![Terminal-exon bucket fractions and UTR-bin MechA-correct rates: 10x vs bulk cerebellum.](docs/example_plots/10x_vs_cerebellum_terminal_exon.png)
+
+![%A in the 20 nt reference window downstream of cleavage, per bucket: 10x vs bulk cerebellum. The empirical split is most visible in MechB_aspecific: 10x reads enriched in the 30-50% A grey band, bulk Iso-Seq reads enriched past the 60% A dashed line. The biochemical driver of this split is currently uncharacterized.](docs/example_plots/10x_vs_cerebellum_basecomp.png)
 
 HTML report (`tecap report`):
 - Self-contained `.html` per sample (and per comparison) with embedded
