@@ -44,8 +44,9 @@ Run `tecap explain` to print these definitions on the terminal, or
 - `{sample}_basecomp.png` — eight panels, one per bucket, showing %A in
   the reference window downstream of cleavage. **Grey band (30-50% A):**
   moderate-A priming. **Dashed line (>=60% A):** classical A-tract priming.
-  Empirically, single-cell prep datasets (10x, BD Rhapsody, ArgenTag,
-  plate FLASH-seq) cluster in the grey band; bulk Iso-Seq datasets
+  Empirically, single-cell prep datasets (10x, in-house FLASH-seq
+  variants on the BD Rhapsody platform and on plates, ArgenTag)
+  cluster in the grey band; bulk Iso-Seq datasets
   cluster past the dashed line. The biochemical driver of this split
   is currently uncharacterized.
 - `comparison_*.png` — same panels, multiple samples grouped on the same
@@ -150,12 +151,13 @@ Cross-sample:
 Two pairwise comparisons rendered with `tecap report`. All samples
 human GRCh38, sequenced as FL Kinnex / MAS-ISO / PacBio HiFi.
 
-**Single-cell vs single-cell:** 10x Kinnex (`10x_FL_v02_full`) vs BD
-Rhapsody Kinnex (`BD46_FS_SEQ`).
+**Single-cell vs single-cell:** 10x Kinnex (`10x_FL_v02_full`) vs
+`BD46_FS_SEQ`, an in-house FLASH-seq variant on the BD Rhapsody
+platform with Kinnex concatenation (not stock Rhapsody chemistry).
 
-![Terminal-exon bucket fractions and UTR-bin MechA-correct rates: 10x vs BD Rhapsody.](docs/example_plots/10x_vs_BD46_terminal_exon.png)
+![Terminal-exon bucket fractions and UTR-bin MechA-correct rates: 10x vs in-house FLASH-seq variant on Rhapsody platform.](docs/example_plots/10x_vs_BD46_terminal_exon.png)
 
-![%A in the 20 nt reference window downstream of cleavage, per bucket: 10x vs BD Rhapsody. Grey band: 30-50% A (moderate-A priming). Dashed line: 60% A (classical A-tract priming). 10x is shifted warmer in the 30-50% A range across most internal-priming buckets; both samples cluster in the grey band, far from the dashed-line regime occupied by bulk Iso-Seq.](docs/example_plots/10x_vs_BD46_basecomp.png)
+![%A in the 20 nt reference window downstream of cleavage, per bucket: 10x vs in-house FLASH-seq variant on Rhapsody platform. Grey band: 30-50% A (moderate-A priming). Dashed line: 60% A (classical A-tract priming). 10x is shifted warmer in the 30-50% A range across most internal-priming buckets; both samples cluster in the grey band, far from the dashed-line regime occupied by bulk Iso-Seq.](docs/example_plots/10x_vs_BD46_basecomp.png)
 
 **Single-cell vs bulk Iso-Seq:** 10x Kinnex vs PacBio Kinnex bulk
 cerebellum.

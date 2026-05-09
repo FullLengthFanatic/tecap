@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- Disambiguated `BD46_FS_SEQ` in the README and basecomp plot
+  caption: it is an in-house FLASH-seq variant adapted to the BD
+  Rhapsody cartridge/beads with Kinnex concatenation, not stock
+  BD Rhapsody chemistry. Earlier wording ("BD Rhapsody Kinnex")
+  conflated a custom protocol with the off-the-shelf platform.
+
 ## [0.4.0] — 2026-05-07
 
 ### Added

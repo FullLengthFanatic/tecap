@@ -207,8 +207,9 @@ PLOT_CAPTIONS = {
         "priming (>=60% A). Enrichment in the grey band reflects priming on "
         "moderate-A sequence; enrichment past the dashed line reflects "
         "priming on classical A-tracts. Empirically, single-cell prep "
-        "datasets (10x, BD Rhapsody, ArgenTag, plate FLASH-seq) cluster in "
-        "the grey band; bulk Iso-Seq datasets cluster past the dashed line. "
+        "datasets (10x, in-house FLASH-seq variants on the BD Rhapsody "
+        "platform and on plates, ArgenTag) cluster in the grey band; "
+        "bulk Iso-Seq datasets cluster past the dashed line. "
         "The biochemical driver of this split is currently uncharacterized."
     ),
     "comparison_basecomp": (
