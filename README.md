@@ -148,6 +148,28 @@ Cross-sample:
 
 ### Example plots
 
+#### Datasets used in the example plots
+
+Five of the six samples are PacBio HiFi sequenced after Kinnex
+concatenation: most use the Kinnex Full-length kit (8x), while the
+public ArgenTag sample uses the Kinnex Single Cell kit (12x).
+`PBMC_FS_ONT` is the exception, sequenced as Oxford Nanopore cDNA
+without Kinnex.
+
+| Sample | Tissue | Organism | Source |
+|---|---|---|---|
+| `10x_FL_v02_full` | Retinal organoid | Human | In-house. 10x GEM-X 3' RNA-seq kit, then Kinnex FL (8x), PacBio HiFi. |
+| `BD46_FS_SEQ` | Retinal organoid | Human | In-house. FLASH-seq variant on the BD Rhapsody platform (bead-bound oligo-dT capture), then Kinnex FL (8x), PacBio HiFi. |
+| `PBMC_FS_ONT` | PBMC | Human | In-house. Plate-based FLASH-seq, sequenced as ONT cDNA (no Kinnex). |
+| `MDA_argentag_kinnex12x` | MDA-MB-453 cell line | Human | Public ArgenTag, nanowell single-cell + Kinnex SC (12x), PacBio HiFi. Source: [downloads.pacbcloud.com/public/dataset/Kinnex-single-cell-RNA/DATA-RevioSPRQ-Kinnex-ArgenTag-MDAcellLine/MDA-12fold/](https://downloads.pacbcloud.com/public/dataset/Kinnex-single-cell-RNA/DATA-RevioSPRQ-Kinnex-ArgenTag-MDAcellLine/MDA-12fold/). |
+| `kinnex_cerebellum` | Cerebellum (bulk) | Human | Public PacBio bulk Iso-Seq + Kinnex FL (8x). Source: [downloads.pacbcloud.com/public/dataset/Kinnex-full-length-RNA/](https://downloads.pacbcloud.com/public/dataset/Kinnex-full-length-RNA/). |
+| `kinnex_heart` | Heart (bulk) | Human | Public PacBio bulk Iso-Seq + Kinnex FL (8x). Source: [downloads.pacbcloud.com/public/dataset/Kinnex-full-length-RNA/](https://downloads.pacbcloud.com/public/dataset/Kinnex-full-length-RNA/) (same parent bucket as cerebellum). |
+
+In-house datasets are not deposited in SRA / GEO; the chemistry
+descriptions above are sufficient to identify what was run. Public
+datasets have no associated DOI / paper at this time; URLs link to
+the PacBio public download locations.
+
 Two pairwise comparisons rendered with `tecap report`. All samples
 human GRCh38, sequenced as FL Kinnex / MAS-ISO / PacBio HiFi.
 
