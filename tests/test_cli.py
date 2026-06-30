@@ -84,6 +84,29 @@ def test_basecomp_end_to_end(synthetic_fixture, tmp_path):
     assert data["window"] == 20
 
 
+def test_basecomp_json_is_self_describing(synthetic_fixture, tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    res = _run_cli([
+        "basecomp",
+        "--bam", synthetic_fixture["bam"],
+        "--gtf", synthetic_fixture["gtf"],
+        "--polya-sites", synthetic_fixture["polya"],
+        "--fasta", synthetic_fixture["fasta"],
+        "--sample", "TST",
+        "--out-dir", str(out),
+        "--platform", "cdna-pacbio",
+    ])
+    assert res.returncode == 0, f"stderr: {res.stderr}"
+
+    data = json.loads((out / "TST_basecomp.json").read_text())
+    # Orientation is recorded; synthetic reads are all correctly oriented.
+    assert data["orient_match_frac"] == 1.0
+    # The regime cutoffs that produced frac_* are stamped into the file.
+    assert data["thresholds"]["frac_ge_60"] == 0.60
+    assert data["thresholds"]["frac_30_50"] == [0.30, 0.50]
+
+
 def test_explain_lists_all_mechanisms():
     res = _run_cli(["explain"])
     assert res.returncode == 0, res.stderr

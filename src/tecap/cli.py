@@ -234,7 +234,12 @@ def _build_parser():
 
 
 def _cmd_classify(args):
-    from tecap.bam import analyse_bam, per_cell_summary, write_per_gene_table
+    from tecap.bam import (
+        analyse_bam,
+        per_cell_summary,
+        warn_if_unstranded,
+        write_per_gene_table,
+    )
     from tecap.gtf import build_gene_index
     from tecap.io import write_json
     from tecap.multiqc import build_mqc_payload, write_mqc_json
@@ -299,6 +304,8 @@ def _cmd_classify(args):
         summary["cell_barcode_tag"] = args.cell_barcode_tag
         summary["per_cell_metrics"] = per_cell_summary(results["per_cell"])
 
+    warn_if_unstranded(summary["orient_match_frac"], log)
+
     json_path = os.path.join(args.out_dir, f"{args.sample}_terminal_exon.json")
 
     if args.per_gene_table:
@@ -343,6 +350,7 @@ def _cmd_classify(args):
 
 
 def _cmd_basecomp(args):
+    from tecap.bam import warn_if_unstranded
     from tecap.basecomp import analyse, summarise
     from tecap.constants import BUCKETS
     from tecap.gtf import build_gene_index
@@ -362,7 +370,7 @@ def _cmd_basecomp(args):
                                     slop=args.polya_slop,
                                     allowed_types=allowed_types)
 
-    pct_a_by_bucket, _ = analyse(
+    pct_a_by_bucket, _, orient = analyse(
         bam_path      = args.bam,
         fasta_path    = args.fasta,
         gene_index    = gene_index,
@@ -374,12 +382,18 @@ def _cmd_basecomp(args):
         threads       = args.threads,
     )
 
+    orient_total = orient["match"] + orient["mismatch"]
+    orient_match_frac = orient["match"] / orient_total if orient_total else None
+
     summary = summarise(pct_a_by_bucket)
-    summary["sample"]      = args.sample
-    summary["platform"]    = args.platform
-    summary["window"]      = args.window
-    summary["polya_slop"]  = args.polya_slop
-    summary["polya_types"] = args.polya_types
+    summary["sample"]            = args.sample
+    summary["platform"]          = args.platform
+    summary["window"]            = args.window
+    summary["polya_slop"]        = args.polya_slop
+    summary["polya_types"]       = args.polya_types
+    summary["orient_match_frac"] = orient_match_frac
+
+    warn_if_unstranded(orient_match_frac, log)
 
     json_path = os.path.join(args.out_dir, f"{args.sample}_basecomp.json")
     write_json(json_path, summary)

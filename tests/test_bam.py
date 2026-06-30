@@ -60,3 +60,33 @@ def test_per_gene_counts_present(synthetic_fixture):
     # All three genes should have at least one read assigned.
     seen = set(r["per_gene"].keys())
     assert {"GA", "GB", "GC"}.issubset(seen)
+
+
+def test_warn_if_unstranded_fires_below_threshold(caplog):
+    import logging
+
+    from tecap.bam import warn_if_unstranded
+    log = logging.getLogger("tecap.test.orient")
+    with caplog.at_level(logging.WARNING):
+        warn_if_unstranded(0.49, log)
+    assert "unstranded" in caplog.text.lower()
+
+
+def test_warn_if_unstranded_silent_when_stranded(caplog):
+    import logging
+
+    from tecap.bam import warn_if_unstranded
+    log = logging.getLogger("tecap.test.orient")
+    with caplog.at_level(logging.WARNING):
+        warn_if_unstranded(0.96, log)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_warn_if_unstranded_silent_when_none(caplog):
+    import logging
+
+    from tecap.bam import warn_if_unstranded
+    log = logging.getLogger("tecap.test.orient")
+    with caplog.at_level(logging.WARNING):
+        warn_if_unstranded(None, log)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

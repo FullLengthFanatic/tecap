@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+- Stranding guard. `classify` and `basecomp` now emit a loud warning when
+  the BAM/gene-strand match fraction falls below `ORIENT_MIN_FRAC` (0.80,
+  in `constants.py`), which flags unstranded input (e.g. ONT cDNA not run
+  through pychopper / cdna_classifier). The read 3' end and the basecomp
+  downstream window are defined from the alignment strand, so unstranded
+  input silently dilutes those metrics toward the genomic mean. `basecomp`
+  now computes orientation itself and records `orient_match_frac` in its
+  JSON (previously only `classify` did).
+- Base composition thresholds stamped into the `basecomp` JSON. The cutoffs
+  that produce `frac_ge_60` / `frac_30_50` / `frac_ge_40` and the histogram
+  bin count are recorded under a top-level `thresholds` key and sourced from
+  new `BASECOMP_*` constants, so a basecomp JSON is self-describing rather
+  than depending on the code version that wrote it. Additive change; the
+  schema stays at 0.1 and existing consumers are unaffected.
+- `whitepaper.md`: a self-contained explainer of what tecap does, its
+  strengths, and its limitations, for readers new to the tool.
+
 ### Changed
 - Disambiguated `BD46_FS_SEQ` in the README and basecomp plot
   caption: it is an in-house FLASH-seq variant adapted to the BD

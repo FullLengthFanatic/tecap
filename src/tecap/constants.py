@@ -45,6 +45,13 @@ UTR_BINS       = [0, 500, 1000, 2000, 5000, np.inf]
 UTR_BIN_LABELS = ["0-500", "500-1k", "1k-2k", "2k-5k", ">5k"]
 
 
+# Below this BAM/gene-strand match fraction the input is most likely
+# unstranded (e.g. ONT cDNA not run through pychopper / cdna_classifier).
+# basecomp and the read 3' end are defined from the alignment strand, so
+# unstranded input dilutes those metrics toward the genomic mean.
+ORIENT_MIN_FRAC = 0.80
+
+
 # Base composition buckets (basecomp subcommand)
 BUCKET_CAPT         = "Captured"
 BUCKET_MA_PAS       = "MechA_PAS+"
@@ -73,6 +80,16 @@ BUCKET_COLORS = {
     BUCKET_MB_ASPECI:    "#8e44ad",
     BUCKET_IP_CDS:       "#e74c3c",
 }
+
+
+# Base composition regime thresholds applied in basecomp.summarise() and
+# stamped into the basecomp JSON, so the cutoffs that produced frac_* are
+# recorded in the output rather than living only in code.
+BASECOMP_GE_HI  = 0.60   # classical A-tract regime (frac_ge_60)
+BASECOMP_MID_LO = 0.30   # moderate-A band, lower edge (frac_30_50)
+BASECOMP_MID_HI = 0.50   # moderate-A band, upper edge (frac_30_50)
+BASECOMP_GE_MID = 0.40   # frac_ge_40
+BASECOMP_HIST_N = 21     # bin edges over [0, 1] -> 5% histogram bins
 
 
 SCHEMA_VERSION = "0.1"

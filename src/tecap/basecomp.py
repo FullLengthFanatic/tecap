@@ -10,6 +10,11 @@ import pysam
 
 from tecap.classify import classify_read
 from tecap.constants import (
+    BASECOMP_GE_HI,
+    BASECOMP_GE_MID,
+    BASECOMP_HIST_N,
+    BASECOMP_MID_HI,
+    BASECOMP_MID_LO,
     BUCKET_CAPT,
     BUCKET_IP_CDS,
     BUCKET_MA_NOPAS,
@@ -106,20 +111,21 @@ def _process_chrom_bc(chrom):
     pct_a_by_bucket = defaultdict(list)
     counts          = defaultdict(int)
     n_no_seq        = 0
+    orient          = {"match": 0, "mismatch": 0}
 
     try:
         bam   = pysam.AlignmentFile(bam_path, "rb")
         fasta = pysam.FastaFile(fasta_path)
     except Exception as e:
         log.error("Failed to open BAM or FASTA for contig %s: %s", chrom, e)
-        return pct_a_by_bucket, counts, 0
+        return pct_a_by_bucket, counts, 0, orient
 
     try:
         iterator = bam.fetch(contig=chrom)
     except ValueError:
         bam.close()
         fasta.close()
-        return pct_a_by_bucket, counts, 0
+        return pct_a_by_bucket, counts, 0, orient
 
     for read in iterator:
         if (read.is_unmapped or read.is_secondary or
@@ -149,6 +155,11 @@ def _process_chrom_bc(chrom):
             continue
 
         rec = gene_records[best_gid]
+        if read.is_reverse == (rec["strand"] == "-"):
+            orient["match"] += 1
+        else:
+            orient["mismatch"] += 1
+
         cat, _, r3p, has_pas = classify_read(read, rec, polya_index, cov_threshold)
         bucket = assign_bucket(cat, has_pas)
         if bucket is None:
@@ -165,7 +176,7 @@ def _process_chrom_bc(chrom):
 
     bam.close()
     fasta.close()
-    return pct_a_by_bucket, counts, n_no_seq
+    return pct_a_by_bucket, counts, n_no_seq, orient
 
 
 def _populated_contigs(bam_path):
@@ -198,25 +209,30 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     pct_a_by_bucket = defaultdict(list)
     bucket_counts   = defaultdict(int)
     n_no_seq_total  = 0
+    orient          = {"match": 0, "mismatch": 0}
 
     try:
         if threads <= 1:
             results_iter = (_process_chrom_bc(c) for c in contigs)
-            for pab, cnt, nns in results_iter:
+            for pab, cnt, nns, ori in results_iter:
                 for b, vs in pab.items():
                     pct_a_by_bucket[b].extend(vs)
                 for b, v in cnt.items():
                     bucket_counts[b] += v
                 n_no_seq_total += nns
+                orient["match"]    += ori["match"]
+                orient["mismatch"] += ori["mismatch"]
         else:
             ctx = mp.get_context("fork")
             with ctx.Pool(processes=threads) as pool:
-                for pab, cnt, nns in pool.imap_unordered(_process_chrom_bc, contigs):
+                for pab, cnt, nns, ori in pool.imap_unordered(_process_chrom_bc, contigs):
                     for b, vs in pab.items():
                         pct_a_by_bucket[b].extend(vs)
                     for b, v in cnt.items():
                         bucket_counts[b] += v
                     n_no_seq_total += nns
+                    orient["match"]    += ori["match"]
+                    orient["mismatch"] += ori["mismatch"]
     finally:
         for k in _WORKER:
             _WORKER[k] = None
@@ -224,12 +240,21 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     log.info("Basecomp done; %s reads dropped for missing/short window",
              f"{n_no_seq_total:,}")
 
-    return pct_a_by_bucket, dict(bucket_counts)
+    return pct_a_by_bucket, dict(bucket_counts), orient
 
 
 def summarise(pct_a_by_bucket):
-    hist_bins = np.linspace(0.0, 1.0, 21)  # 5% bins
-    out = {"bin_edges": hist_bins.tolist(), "buckets": {}}
+    hist_bins = np.linspace(0.0, 1.0, BASECOMP_HIST_N)  # 5% bins
+    out = {
+        "bin_edges": hist_bins.tolist(),
+        "thresholds": {
+            "frac_ge_60": BASECOMP_GE_HI,
+            "frac_30_50": [BASECOMP_MID_LO, BASECOMP_MID_HI],
+            "frac_ge_40": BASECOMP_GE_MID,
+            "hist_bins":  BASECOMP_HIST_N,
+        },
+        "buckets": {},
+    }
     for b in BUCKETS:
         vals = np.asarray(pct_a_by_bucket.get(b, []), dtype=np.float32)
         if len(vals) == 0:
@@ -244,9 +269,9 @@ def summarise(pct_a_by_bucket):
             "n":           int(len(vals)),
             "median":      float(np.median(vals)),
             "mean":        float(np.mean(vals)),
-            "frac_ge_60":  float((vals >= 0.60).mean()),
-            "frac_30_50":  float(((vals >= 0.30) & (vals < 0.50)).mean()),
-            "frac_ge_40":  float((vals >= 0.40).mean()),
+            "frac_ge_60":  float((vals >= BASECOMP_GE_HI).mean()),
+            "frac_30_50":  float(((vals >= BASECOMP_MID_LO) & (vals < BASECOMP_MID_HI)).mean()),
+            "frac_ge_40":  float((vals >= BASECOMP_GE_MID).mean()),
             "hist":        hist.tolist(),
         }
     return out

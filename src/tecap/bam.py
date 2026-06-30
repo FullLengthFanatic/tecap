@@ -18,11 +18,30 @@ from tecap.constants import (
     CATEGORIES,
     MECH_A_CORRECT,
     MECH_B_APA,
+    ORIENT_MIN_FRAC,
     UTR_BIN_LABELS,
 )
 from tecap.polya import utr_bin
 
 log = logging.getLogger(__name__)
+
+
+def warn_if_unstranded(orient_match_frac, log):
+    """Emit a loud warning when the BAM/gene-strand match fraction signals
+    unstranded input. The read 3' end and the basecomp downstream window are
+    both defined from the alignment strand, so random orientation makes them
+    meaningless and dilutes the metrics toward the genomic mean."""
+    if orient_match_frac is None:
+        return
+    if orient_match_frac < ORIENT_MIN_FRAC:
+        log.warning(
+            "BAM/gene-strand match fraction is %.3f (expected ~0.95 or higher). "
+            "The input looks unstranded: reads with random orientation make the "
+            "downstream window ambiguous and dilute strand-dependent metrics "
+            "(basecomp base composition, read 3' end). Orient cDNA reads with "
+            "pychopper / cdna_classifier before running tecap.",
+            orient_match_frac,
+        )
 
 
 _WORKER = {

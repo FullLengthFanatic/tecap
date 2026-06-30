@@ -46,7 +46,7 @@ def test_analyse_end_to_end(synthetic_fixture):
     gene_index, gene_records = build_gene_index(fx["gtf"])
     polya_index = build_polya_index(fx["polya"], slop=25,
                                     allowed_types={"TE", "DS", "DI", "EX"})
-    pct_a_by_bucket, bucket_counts = analyse(
+    pct_a_by_bucket, bucket_counts, _ = analyse(
         bam_path=fx["bam"], fasta_path=fx["fasta"],
         gene_index=gene_index, gene_records=gene_records,
         polya_index=polya_index,
@@ -58,3 +58,28 @@ def test_analyse_end_to_end(synthetic_fixture):
     # r_mechA_pas_1 has 3'end=9950, window 20 A's → pct_a=1.0.
     assert ma_pas["n"] >= 1
     assert ma_pas["median"] == 1.0
+
+
+def test_analyse_reports_orientation(synthetic_fixture):
+    fx = synthetic_fixture
+    gene_index, gene_records = build_gene_index(fx["gtf"])
+    polya_index = build_polya_index(fx["polya"], slop=25,
+                                    allowed_types={"TE", "DS", "DI", "EX"})
+    _, _, orient = analyse(
+        bam_path=fx["bam"], fasta_path=fx["fasta"],
+        gene_index=gene_index, gene_records=gene_records,
+        polya_index=polya_index,
+        cov_threshold=0.5, min_mapq=0, window=20, threads=1,
+    )
+    # Every synthetic read is correctly oriented (GA forward/+, GB reverse/-).
+    assert orient["match"] + orient["mismatch"] > 0
+    assert orient["mismatch"] == 0
+
+
+def test_summarise_stamps_thresholds():
+    out = summarise({})
+    th = out["thresholds"]
+    assert th["frac_ge_60"] == 0.60
+    assert th["frac_30_50"] == [0.30, 0.50]
+    assert th["frac_ge_40"] == 0.40
+    assert th["hist_bins"] == 21
