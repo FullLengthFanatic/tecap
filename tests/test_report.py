@@ -2,7 +2,9 @@
 
 from html.parser import HTMLParser
 
-from tecap.constants import CATEGORIES, MECHANISM_DEFINITIONS, SCHEMA_VERSION
+import pytest
+
+from tecap.constants import BUCKETS, CATEGORIES, MECHANISM_DEFINITIONS, SCHEMA_VERSION
 from tecap.io import write_json
 from tecap.report import build_compare_report, build_single_report
 
@@ -58,6 +60,86 @@ def _basecomp_summary(sample):
     }
 
 
+# n_templated, n_nontemplated, n_ambiguous per bucket; n_site is their sum.
+_LABEL_COUNTS = {
+    "Captured":        (300, 4200, 400),
+    "MechA_PAS+":      (60, 820, 90),
+    "MechA_PAS-":      (240, 380, 150),
+    "MechB_APA_PAS+":  (20, 250, 25),
+    "MechB_APA_PAS-":  (55, 60, 30),
+    "MechB_exon":      (180, 120, 90),
+    "MechB_aspecific": (120, 30, 45),
+    "IP_TE_CDS":       (0, 0, 0),
+}
+
+
+def _labelled_basecomp_summary(sample):
+    bc = _basecomp_summary(sample)
+    for b, (t, nt, amb) in _LABEL_COUNTS.items():
+        bc["buckets"][b].update(
+            n_site=t + nt + amb, n_templated=t, n_nontemplated=nt, n_ambiguous=amb)
+    return bc
+
+
+def _null_label_basecomp_summary(sample):
+    # What basecomp writes when --window is not 20: label keys present, null.
+    bc = _basecomp_summary(sample)
+    bc["window"] = 30
+    for d in bc["buckets"].values():
+        d.update(n_site=None, n_templated=None, n_nontemplated=None, n_ambiguous=None)
+    return bc
+
+
+_LABEL_HEADER = ["Bucket", "Reads with a site", "Templated", "Non-templated", "Ambiguous"]
+
+_LABEL_CAPTION = (
+    "A bucket says where the site is. The label says what kind of site it is: "
+    "templated (8 or more adenines in the 20 nt of reference downstream of the "
+    "site), non-templated (4 or fewer) or ambiguous (5 to 7). Counts cover "
+    "reads whose site was observed under the site anchor of this run."
+)
+
+
+class _TableCells(HTMLParser):
+    """Every <table> as a list of rows, each row a list of cell texts."""
+
+    def __init__(self):
+        super().__init__()
+        self.tables = []
+        self._cell = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table":
+            self.tables.append([])
+        elif tag == "tr":
+            self.tables[-1].append([])
+        elif tag in ("td", "th"):
+            self._cell = []
+
+    def handle_endtag(self, tag):
+        if tag in ("td", "th"):
+            self.tables[-1][-1].append("".join(self._cell).strip())
+            self._cell = None
+
+    def handle_data(self, data):
+        if self._cell is not None:
+            self._cell.append(data)
+
+
+def _label_tables(html):
+    p = _TableCells()
+    p.feed(html)
+    return [t for t in p.tables if t and t[0] == _LABEL_HEADER]
+
+
+def _expected_label_rows():
+    rows = []
+    for b in BUCKETS:
+        t, nt, amb = _LABEL_COUNTS[b]
+        rows.append([b, f"{t + nt + amb:,}", f"{t:,}", f"{nt:,}", f"{amb:,}"])
+    return rows
+
+
 class _ImgCounter(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -107,6 +189,33 @@ def test_single_report_with_basecomp(tmp_path):
     assert "30-50% A" in html or "30-50%" in html
 
 
+def test_single_report_bucket_by_label_table(tmp_path):
+    cj = tmp_path / "S1_terminal_exon.json"
+    bj = tmp_path / "S1_basecomp.json"
+    write_json(str(cj), _classify_summary("S1"))
+    write_json(str(bj), _labelled_basecomp_summary("S1"))
+
+    html = build_single_report(str(cj), str(bj))
+    tables = _label_tables(html)
+    assert len(tables) == 1
+    assert tables[0][1:] == _expected_label_rows()
+    assert _LABEL_CAPTION in html
+
+
+@pytest.mark.parametrize("make_bc", [_basecomp_summary, _null_label_basecomp_summary],
+                         ids=["no_label_keys", "null_label_keys"])
+def test_single_report_without_labels_has_no_label_table(tmp_path, make_bc):
+    cj = tmp_path / "S1_terminal_exon.json"
+    bj = tmp_path / "S1_basecomp.json"
+    write_json(str(cj), _classify_summary("S1"))
+    write_json(str(bj), make_bc("S1"))
+
+    html = build_single_report(str(cj), str(bj))
+    assert "Median %A" in html
+    assert _label_tables(html) == []
+    assert _LABEL_CAPTION not in html
+
+
 def test_compare_report_renders(tmp_path):
     paths = []
     for s in ("S1", "S2"):
@@ -135,6 +244,26 @@ def test_compare_report_with_basecomp(tmp_path):
     html = build_compare_report(cpaths, bpaths, out_dir=str(tmp_path))
     assert "Base composition" in html
     assert (tmp_path / "comparison_basecomp.png").exists()
+    assert _label_tables(html) == []
+    assert _LABEL_CAPTION not in html
+
+
+def test_compare_report_bucket_by_label_table(tmp_path):
+    # S1 carries labels, S2 is an older JSON without them: one table, for S1.
+    cpaths, bpaths = [], []
+    for s, make_bc in (("S1", _labelled_basecomp_summary), ("S2", _basecomp_summary)):
+        cp = tmp_path / f"{s}_terminal_exon.json"
+        bp = tmp_path / f"{s}_basecomp.json"
+        write_json(str(cp), _classify_summary(s))
+        write_json(str(bp), make_bc(s))
+        cpaths.append(str(cp))
+        bpaths.append(str(bp))
+
+    html = build_compare_report(cpaths, bpaths, out_dir=str(tmp_path))
+    tables = _label_tables(html)
+    assert len(tables) == 1
+    assert tables[0][1:] == _expected_label_rows()
+    assert html.count(_LABEL_CAPTION) == 1
 
 
 def test_single_report_has_intro_and_glossary(tmp_path):

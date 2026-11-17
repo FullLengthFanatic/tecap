@@ -252,6 +252,12 @@ PLOT_CAPTIONS = {
         ">=60% A (classical A-tract). Compare buckets across samples to spot "
         "protocol-specific mispriming."
     ),
+    "bucket_by_label": (
+        "A bucket says where the site is. The label says what kind of site it "
+        "is: templated (8 or more adenines in the 20 nt of reference downstream "
+        "of the site), non-templated (4 or fewer) or ambiguous (5 to 7). Counts "
+        "cover reads whose site was observed under the site anchor of this run."
+    ),
 }
 
 

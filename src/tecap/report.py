@@ -286,6 +286,34 @@ def _basecomp_table(bc):
     )
 
 
+def _bucket_label_table(bc):
+    """Reads with an observed site per bucket, split by label. Empty string
+    when the basecomp JSON has no label counts (written before the labels,
+    or with a window other than LABEL_WINDOW, where they are null)."""
+    buckets = bc.get("buckets") or {}
+    if all(d.get("n_site") is None for d in buckets.values()):
+        return ""
+    rows = []
+    for b in BUCKETS:
+        d = buckets.get(b) or {}
+        rows.append(
+            f"<tr><td><span class='swatch' style='background:{BUCKET_COLORS[b]}'></span>"
+            f"{escape(b)}</td>"
+            f"<td class='num'>{_fmt_int(d.get('n_site'))}</td>"
+            f"<td class='num'>{_fmt_int(d.get('n_templated'))}</td>"
+            f"<td class='num'>{_fmt_int(d.get('n_nontemplated'))}</td>"
+            f"<td class='num'>{_fmt_int(d.get('n_ambiguous'))}</td></tr>"
+        )
+    return (
+        "<table><thead><tr><th>Bucket</th>"
+        "<th class='num'>Reads with a site</th>"
+        "<th class='num'>Templated</th>"
+        "<th class='num'>Non-templated</th>"
+        "<th class='num'>Ambiguous</th></tr></thead><tbody>"
+        + "".join(rows) + "</tbody></table>"
+    )
+
+
 def _summary_tile(label, value, color="#2ecc71"):
     return (f"<div class='tile' style='border-left-color:{color}'>"
             f"<div class='label'>{escape(label)}</div>"
@@ -396,6 +424,15 @@ def build_single_report(classify_json, basecomp_json=None, out_dir=None):
             f"<p class='caption'>{escape(PLOT_CAPTIONS['basecomp'].format(window=window))}</p>",
             "<h3>Per-bucket %A summary</h3>",
             _basecomp_table(bc_summary),
+        ]
+        label_html = _bucket_label_table(bc_summary)
+        if label_html:
+            parts += [
+                "<h3>Bucket by label</h3>",
+                label_html,
+                f"<p class='caption'>{escape(PLOT_CAPTIONS['bucket_by_label'])}</p>",
+            ]
+        parts += [
             "<h3>Bucket legend</h3>",
             _bucket_legend_html(),
         ]
@@ -465,6 +502,16 @@ def build_compare_report(classify_jsons, basecomp_jsons=None, out_dir=None):
         for s in bc_summaries:
             parts.append(f"<h4>{escape(s.get('sample','?'))}</h4>")
             parts.append(_basecomp_table(s))
+
+        label_tables = [(s, _bucket_label_table(s)) for s in bc_summaries]
+        if any(t for _, t in label_tables):
+            parts += [
+                "<h3>Bucket by label</h3>",
+                f"<p class='caption'>{escape(PLOT_CAPTIONS['bucket_by_label'])}</p>",
+            ]
+            for s, t in label_tables:
+                if t:
+                    parts += [f"<h4>{escape(s.get('sample','?'))}</h4>", t]
 
     parts += ["<h2>Glossary</h2>", _glossary_html()]
 
