@@ -51,11 +51,15 @@ def classify_read(read, gene_rec, polya_index, cov_threshold, read_3prime=None):
         upstream_of_te   = read_3prime >= te_end
         downstream_of_te = read_3prime <  te_start
 
+    # hits_polya and in_upstream_exon test one base against half-open
+    # intervals; on plus genes read_3prime is the first base after the read.
+    last_base = read_3prime - 1 if strand == "+" else read_3prime
+
     if upstream_of_te:
-        hit, has_pas = hits_polya(chrom, read_3prime, strand, polya_index)
+        hit, has_pas = hits_polya(chrom, last_base, strand, polya_index)
         if hit:
             return MECH_B_APA, cov_frac, read_3prime, has_pas
-        if in_upstream_exon(read_3prime, gene_rec):
+        if in_upstream_exon(last_base, gene_rec):
             return MECH_B_EXON, cov_frac, read_3prime, False
         return MECH_B_ASPECI, cov_frac, read_3prime, False
 
@@ -71,7 +75,7 @@ def classify_read(read, gene_rec, polya_index, cov_threshold, read_3prime=None):
         in_utr = read_3prime < cds_end
 
     if in_utr:
-        hit, has_pas = hits_polya(chrom, read_3prime, strand, polya_index)
+        hit, has_pas = hits_polya(chrom, last_base, strand, polya_index)
         if hit:
             return MECH_A_CORRECT, cov_frac, read_3prime, has_pas
         return MECH_A_INTERNAL_UTR, cov_frac, read_3prime, False

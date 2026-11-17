@@ -1,11 +1,15 @@
 """Tests for per-read classification: every read should land in its bucket."""
 
 import pysam
+import pytest
+from intervaltree import IntervalTree
 
 from tecap.classify import classify_read
 from tecap.constants import (
     INTERNAL_PRIME_TE_CDS,
     MECH_A_CORRECT,
+    MECH_B_APA,
+    MECH_B_ASPECI,
     MECH_B_EXON,
     MECH_C,
 )
@@ -99,3 +103,95 @@ def test_read_3prime_drives_every_position_test(synthetic_fixture):
     assert got[3200][0] == MECH_B_EXON
     assert got[10500][0] == MECH_C
     assert {r3p: g[2] for r3p, g in got.items()} == {r: r for r in got}
+
+
+# Exon and polyA-cluster edges. read_3prime on plus genes is the first base
+# after the read; on minus genes it is the last cDNA base. The minus gene
+# mirrors the plus gene: base p -> 11999 - p, interval [s, e) -> [12000 - e, 12000 - s).
+EDGE_CHROM = "chr_edge"
+
+# Plus: upstream exons [1000,1500) and [3000,3500), TE [7000,10000), CDS ends at 8000.
+EDGE_PLUS = {
+    "chrom": EDGE_CHROM, "strand": "+",
+    "te_start": 7000, "te_end": 10000, "te_length": 3000,
+    "cds_end_genomic": 8000,
+    "upstream_exon_tree": IntervalTree.from_tuples([(1000, 1500, 1), (3000, 3500, 1)]),
+}
+# Minus: upstream exons [10500,11000) and [8500,9000), TE [2000,5000), CDS ends at 4000.
+EDGE_MINUS = {
+    "chrom": EDGE_CHROM, "strand": "-",
+    "te_start": 2000, "te_end": 5000, "te_length": 3000,
+    "cds_end_genomic": 4000,
+    "upstream_exon_tree": IntervalTree.from_tuples([(8500, 9000, 1), (10500, 11000, 1)]),
+}
+
+# PAS+ clusters in the intron upstream of the TE; with slop 25 the plus one
+# covers [4975,5125) (last base 5124) and the minus one [6875,7025) (last
+# base on the transcript strand 6875). The 3' UTR clusters cover [8975,9125)
+# on plus (last base 9124) and [2875,3025) on minus (last base 2875).
+EDGE_CLUSTERS = [
+    (EDGE_CHROM, 5000, 5100, "plus_up",   "0", "+", "0", "0", "0", "DS", "AATAAA"),
+    (EDGE_CHROM, 6900, 7000, "minus_up",  "0", "-", "0", "0", "0", "DS", "AATAAA"),
+    (EDGE_CHROM, 9000, 9100, "plus_utr",  "0", "+", "0", "0", "0", "TE", "AATAAA"),
+    (EDGE_CHROM, 2900, 3000, "minus_utr", "0", "-", "0", "0", "0", "TE", "AATAAA"),
+]
+
+
+@pytest.fixture
+def edge_polya_index(tmp_path):
+    bed = tmp_path / "edge_polya.bed"
+    bed.write_text("".join("\t".join(map(str, row)) + "\n" for row in EDGE_CLUSTERS))
+    return build_polya_index(str(bed), slop=25, allowed_types={"TE", "DS", "DI", "EX"})
+
+
+def _edge_read(start, end, strand):
+    read = pysam.AlignedSegment()
+    read.query_name = f"edge_{strand}_{start}_{end}"
+    read.flag = 16 if strand == "-" else 0
+    read.reference_start = start
+    read.cigartuples = [(0, end - start)]
+    return read
+
+
+# (strand, read start, read end, last cDNA base, expected bucket)
+EDGE_CASES = [
+    # last cDNA base is the last base of the upstream exon
+    ("+", 3000, 3500, 3499, MECH_B_EXON),
+    ("-", 8500, 9000, 8500, MECH_B_EXON),
+    # last cDNA base is the first intronic base after that exon
+    ("+", 3000, 3501, 3500, MECH_B_ASPECI),
+    ("-", 8499, 9000, 8499, MECH_B_ASPECI),
+    # last cDNA base is the last position of the polyA cluster after slop
+    ("+", 4900, 5125, 5124, MECH_B_APA),
+    ("-", 6875, 7200, 6875, MECH_B_APA),
+    # one base further: not APA
+    ("+", 4900, 5126, 5125, MECH_B_ASPECI),
+    ("-", 6874, 7200, 6874, MECH_B_ASPECI),
+    # leading edges: last cDNA base one base before the exon, and one base
+    # before the polyA cluster interval after slop
+    ("+", 2500, 3000, 2999, MECH_B_ASPECI),
+    ("-", 9000, 9500, 9000, MECH_B_ASPECI),
+    ("+", 4900, 4975, 4974, MECH_B_ASPECI),
+    ("-", 7025, 7200, 7025, MECH_B_ASPECI),
+    # 3' UTR branch: last cDNA base is the last position of a UTR cluster
+    # after slop (coverage 625 / 3000, below the 0.5 threshold)
+    ("+", 8500, 9125, 9124, MECH_A_CORRECT),
+    ("-", 2875, 3500, 2875, MECH_A_CORRECT),
+]
+
+
+@pytest.mark.parametrize("strand,start,end,last_base,expected", EDGE_CASES)
+def test_position_tests_use_the_last_cdna_base(edge_polya_index, strand, start, end,
+                                               last_base, expected):
+    rec = EDGE_PLUS if strand == "+" else EDGE_MINUS
+    read = _edge_read(start, end, strand)
+    boundary = end if strand == "+" else start
+    assert boundary == (last_base + 1 if strand == "+" else last_base)
+
+    by_alignment = classify_read(read, rec, edge_polya_index, 0.5)
+    by_site = classify_read(read, rec, edge_polya_index, 0.5, read_3prime=boundary)
+
+    assert by_alignment[0] == expected
+    assert by_alignment[2] == boundary
+    assert by_alignment[3] is (expected in (MECH_B_APA, MECH_A_CORRECT))
+    assert by_site == by_alignment
