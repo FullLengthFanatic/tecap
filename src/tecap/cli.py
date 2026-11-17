@@ -368,7 +368,7 @@ def _cmd_classify(args):
 def _cmd_basecomp(args):
     from tecap.bam import warn_if_unstranded
     from tecap.basecomp import analyse, summarise
-    from tecap.constants import BUCKETS
+    from tecap.constants import BUCKETS, LABEL_WINDOW
     from tecap.gtf import build_gene_index
     from tecap.io import write_json
     from tecap.plotting import plot_histograms_basecomp
@@ -377,6 +377,9 @@ def _cmd_basecomp(args):
     log = logging.getLogger("tecap.basecomp")
     log.info("sample=%s bam=%s fasta=%s window=%d",
              args.sample, args.bam, args.fasta, args.window)
+    if args.window != LABEL_WINDOW:
+        log.warning("--window %d is not the %d nt label window: label fields are null",
+                    args.window, LABEL_WINDOW)
     os.makedirs(args.out_dir, exist_ok=True)
 
     gene_index, gene_records = build_gene_index(args.gtf)
@@ -386,7 +389,7 @@ def _cmd_basecomp(args):
                                     slop=args.polya_slop,
                                     allowed_types=allowed_types)
 
-    pct_a_by_bucket, _, orient, site_stats = analyse(
+    a_count_by_bucket, _, orient, site_stats = analyse(
         bam_path      = args.bam,
         fasta_path    = args.fasta,
         gene_index    = gene_index,
@@ -402,7 +405,8 @@ def _cmd_basecomp(args):
     orient_total = orient["match"] + orient["mismatch"]
     orient_match_frac = orient["match"] / orient_total if orient_total else None
 
-    summary = summarise(pct_a_by_bucket)
+    labels = site_stats.pop("labels")
+    summary = summarise(a_count_by_bucket, window=args.window, labels=labels)
     summary["sample"]            = args.sample
     summary["platform"]          = args.platform
     summary["window"]            = args.window

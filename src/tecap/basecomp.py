@@ -25,14 +25,21 @@ from tecap.constants import (
     BUCKET_MB_EXON,
     BUCKETS,
     CAPTURED,
+    DEFINITION_SOURCE,
     INTERNAL_PRIME_TE_CDS,
+    LABEL_WINDOW,
+    LABELS,
     MECH_A_CORRECT,
     MECH_B_APA,
     MECH_B_ASPECI,
     MECH_B_EXON,
+    NONTEMPLATED_MAX,
     SITE_ANCHOR_DEFAULT,
+    SITE_RUN_MIN,
+    SITE_RUN_TOLERANCE,
+    TEMPLATED_MIN,
 )
-from tecap.site import read_site
+from tecap.site import label_of, read_site
 
 log = logging.getLogger(__name__)
 
@@ -95,12 +102,6 @@ def downstream_window(fasta, chrom, pos, strand, win):
     return seq
 
 
-def pct_a(seq):
-    if not seq:
-        return None
-    return seq.count("A") / len(seq)
-
-
 def _process_chrom_bc(chrom):
     bam_path      = _WORKER["bam_path"]
     fasta_path    = _WORKER["fasta_path"]
@@ -112,25 +113,25 @@ def _process_chrom_bc(chrom):
     window        = _WORKER["window"]
     site_anchor   = _WORKER["site_anchor"]
 
-    pct_a_by_bucket = defaultdict(list)
-    counts          = defaultdict(int)
-    n_no_seq        = 0
-    orient          = {"match": 0, "mismatch": 0}
-    site_stats      = {"observed": 0, "fallback": 0}
+    a_count_by_bucket = defaultdict(list)
+    counts            = defaultdict(int)
+    n_no_seq          = 0
+    orient            = {"match": 0, "mismatch": 0}
+    site_stats        = {"observed": 0, "fallback": 0, "labels": {}}
 
     try:
         bam   = pysam.AlignmentFile(bam_path, "rb")
         fasta = pysam.FastaFile(fasta_path)
     except Exception as e:
         log.error("Failed to open BAM or FASTA for contig %s: %s", chrom, e)
-        return pct_a_by_bucket, counts, 0, orient, site_stats
+        return a_count_by_bucket, counts, 0, orient, site_stats
 
     try:
         iterator = bam.fetch(contig=chrom)
     except ValueError:
         bam.close()
         fasta.close()
-        return pct_a_by_bucket, counts, 0, orient, site_stats
+        return a_count_by_bucket, counts, 0, orient, site_stats
 
     for read in iterator:
         if (read.is_unmapped or read.is_secondary or
@@ -174,17 +175,20 @@ def _process_chrom_bc(chrom):
             continue
 
         seq = downstream_window(fasta, chrom, site, rec["strand"], window)
-        a = pct_a(seq)
-        if a is None:
+        if not seq:
             n_no_seq += 1
             continue
 
-        pct_a_by_bucket[bucket].append(a)
+        k = seq.count("A")
+        a_count_by_bucket[bucket].append(k)
         counts[bucket] += 1
+        if observed and window == LABEL_WINDOW:
+            by_label = site_stats["labels"].setdefault(bucket, dict.fromkeys(LABELS, 0))
+            by_label[label_of(k)] += 1
 
     bam.close()
     fasta.close()
-    return pct_a_by_bucket, counts, n_no_seq, orient, site_stats
+    return a_count_by_bucket, counts, n_no_seq, orient, site_stats
 
 
 def _populated_contigs(bam_path):
@@ -202,12 +206,15 @@ def _populated_contigs(bam_path):
 def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
             cov_threshold, min_mapq, window, threads=1,
             site_anchor=SITE_ANCHOR_DEFAULT):
-    """Returns (pct_a_by_bucket, bucket_counts, orient, site_stats).
+    """Returns (a_count_by_bucket, bucket_counts, orient, site_stats).
 
-    site_anchor picks the read 3' end used for classification and as the
-    start of the downstream window (see tecap.site.read_site); site_stats
-    counts the reads whose site was observed and those that fell back to
-    the alignment end.
+    a_count_by_bucket holds, per bucket, the integer adenine count of each
+    read's downstream window. site_anchor picks the read 3' end used for
+    classification and as the start of the downstream window (see
+    tecap.site.read_site); site_stats counts the reads whose site was
+    observed and those that fell back to the alignment end, and under
+    "labels" the label of each bucketed read with an observed site and a
+    window, per bucket. Labels are counted only when window is LABEL_WINDOW.
     """
     contigs = _populated_contigs(bam_path)
     log.info("Basecomp analysing %d populated contigs with %d worker(s) (window=%d)",
@@ -223,18 +230,18 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     _WORKER["window"]        = window
     _WORKER["site_anchor"]   = site_anchor
 
-    pct_a_by_bucket = defaultdict(list)
-    bucket_counts   = defaultdict(int)
-    n_no_seq_total  = 0
-    orient          = {"match": 0, "mismatch": 0}
-    site_stats      = {"observed": 0, "fallback": 0}
+    a_count_by_bucket = defaultdict(list)
+    bucket_counts     = defaultdict(int)
+    n_no_seq_total    = 0
+    orient            = {"match": 0, "mismatch": 0}
+    site_stats        = {"observed": 0, "fallback": 0, "labels": {}}
 
     try:
         if threads <= 1:
             results_iter = (_process_chrom_bc(c) for c in contigs)
-            for pab, cnt, nns, ori, sst in results_iter:
-                for b, vs in pab.items():
-                    pct_a_by_bucket[b].extend(vs)
+            for acb, cnt, nns, ori, sst in results_iter:
+                for b, vs in acb.items():
+                    a_count_by_bucket[b].extend(vs)
                 for b, v in cnt.items():
                     bucket_counts[b] += v
                 n_no_seq_total += nns
@@ -242,12 +249,16 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
                 orient["mismatch"] += ori["mismatch"]
                 site_stats["observed"] += sst["observed"]
                 site_stats["fallback"] += sst["fallback"]
+                for b, by_label in sst["labels"].items():
+                    tot = site_stats["labels"].setdefault(b, dict.fromkeys(LABELS, 0))
+                    for x, v in by_label.items():
+                        tot[x] += v
         else:
             ctx = mp.get_context("fork")
             with ctx.Pool(processes=threads) as pool:
-                for pab, cnt, nns, ori, sst in pool.imap_unordered(_process_chrom_bc, contigs):
-                    for b, vs in pab.items():
-                        pct_a_by_bucket[b].extend(vs)
+                for acb, cnt, nns, ori, sst in pool.imap_unordered(_process_chrom_bc, contigs):
+                    for b, vs in acb.items():
+                        a_count_by_bucket[b].extend(vs)
                     for b, v in cnt.items():
                         bucket_counts[b] += v
                     n_no_seq_total += nns
@@ -255,6 +266,10 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
                     orient["mismatch"] += ori["mismatch"]
                     site_stats["observed"] += sst["observed"]
                     site_stats["fallback"] += sst["fallback"]
+                    for b, by_label in sst["labels"].items():
+                        tot = site_stats["labels"].setdefault(b, dict.fromkeys(LABELS, 0))
+                        for x, v in by_label.items():
+                            tot[x] += v
     finally:
         for k in _WORKER:
             _WORKER[k] = None
@@ -262,28 +277,56 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     log.info("Basecomp done; %s reads dropped for missing/short window",
              f"{n_no_seq_total:,}")
 
-    return pct_a_by_bucket, dict(bucket_counts), orient, site_stats
+    return a_count_by_bucket, dict(bucket_counts), orient, site_stats
 
 
-def summarise(pct_a_by_bucket):
+def summarise(a_count_by_bucket, window=LABEL_WINDOW, labels=None):
+    """Per-bucket summary of the adenine counts in the `window` nt window.
+
+    The adenine share bands (median, mean, hist, frac_*) are computed on
+    count / window. The label fields come from `labels` (site_stats["labels"]
+    of analyse); they are None when labels is None or window is not
+    LABEL_WINDOW, and frac_<label> is None when the bucket has no read with
+    a site.
+    """
     hist_bins = np.linspace(0.0, 1.0, BASECOMP_HIST_N)  # 5% bins
+    labelled = labels is not None and window == LABEL_WINDOW
     out = {
+        "definition_source": DEFINITION_SOURCE,
         "bin_edges": hist_bins.tolist(),
         "thresholds": {
             "frac_ge_60": BASECOMP_GE_HI,
             "frac_30_50": [BASECOMP_MID_LO, BASECOMP_MID_HI],
             "frac_ge_40": BASECOMP_GE_MID,
             "hist_bins":  BASECOMP_HIST_N,
+            "templated_min":      TEMPLATED_MIN,
+            "nontemplated_max":   NONTEMPLATED_MAX,
+            "label_window":       LABEL_WINDOW,
+            "site_run_min":       SITE_RUN_MIN,
+            "site_run_tolerance": SITE_RUN_TOLERANCE,
         },
         "buckets": {},
     }
     for b in BUCKETS:
-        vals = np.asarray(pct_a_by_bucket.get(b, []), dtype=np.float32)
+        counts = np.asarray(a_count_by_bucket.get(b, []), dtype=np.float64)
+        vals = (counts / window).astype(np.float32)
+        if labelled:
+            n = {x: labels.get(b, {}).get(x, 0) for x in LABELS}
+            n_site = sum(n.values())
+            label_fields = {
+                "n_site": n_site,
+                **{f"n_{x}": n[x] for x in LABELS},
+                **{f"frac_{x}": n[x] / n_site if n_site else None for x in LABELS},
+            }
+        else:
+            label_fields = dict.fromkeys(
+                ["n_site", *(f"n_{x}" for x in LABELS), *(f"frac_{x}" for x in LABELS)])
         if len(vals) == 0:
             out["buckets"][b] = {
                 "n": 0, "median": None, "mean": None,
                 "frac_ge_60":  None, "frac_30_50": None, "frac_ge_40": None,
                 "hist": [0] * (len(hist_bins) - 1),
+                **label_fields,
             }
             continue
         hist, _ = np.histogram(vals, bins=hist_bins)
@@ -295,5 +338,6 @@ def summarise(pct_a_by_bucket):
             "frac_30_50":  float(((vals >= BASECOMP_MID_LO) & (vals < BASECOMP_MID_HI)).mean()),
             "frac_ge_40":  float((vals >= BASECOMP_GE_MID).mean()),
             "hist":        hist.tolist(),
+            **label_fields,
         }
     return out

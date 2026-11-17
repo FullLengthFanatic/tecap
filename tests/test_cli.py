@@ -8,7 +8,7 @@ import sys
 import pysam
 import pytest
 
-from tecap.constants import SITE_ANCHOR_DEFAULT
+from tecap.constants import BUCKETS, DEFINITION_SOURCE, SITE_ANCHOR_DEFAULT
 
 
 def _run_cli(args, cwd=None):
@@ -110,6 +110,43 @@ def test_basecomp_json_is_self_describing(synthetic_fixture, tmp_path):
     # The regime cutoffs that produced frac_* are stamped into the file.
     assert data["thresholds"]["frac_ge_60"] == 0.60
     assert data["thresholds"]["frac_30_50"] == [0.30, 0.50]
+
+
+def test_basecomp_json_carries_the_labels(synthetic_fixture, tmp_path):
+    fx = synthetic_fixture
+    res = _run_cli(["basecomp", "--bam", fx["bam"], "--gtf", fx["gtf"],
+                    "--polya-sites", fx["polya"], "--fasta", fx["fasta"],
+                    "--sample", "TST", "--out-dir", str(tmp_path)])
+    assert res.returncode == 0, f"stderr: {res.stderr}"
+    assert "label fields are null" not in res.stderr
+    data = json.loads((tmp_path / "TST_basecomp.json").read_text())
+    assert data["definition_source"] == DEFINITION_SOURCE
+    assert data["thresholds"]["templated_min"] == 8
+    # Default anchor: r_internal_kept is the one read with an observed site.
+    cap = data["buckets"]["Captured"]
+    assert (cap["n"], cap["n_site"], cap["n_templated"], cap["frac_templated"]) == (3, 1, 1, 1.0)
+    assert data["buckets"]["MechA_PAS+"]["n_site"] == 0
+    assert data["site_counts"] == {"observed": 1, "fallback": len(fx["expected_buckets"]) - 1}
+
+
+def test_basecomp_window_other_than_20(synthetic_fixture, tmp_path):     # Review Focus 4
+    """Bands computed on the 30 nt window as before; label fields null; warned."""
+    fx = synthetic_fixture
+    res = _run_cli(["basecomp", "--bam", fx["bam"], "--gtf", fx["gtf"],
+                    "--polya-sites", fx["polya"], "--fasta", fx["fasta"],
+                    "--sample", "TST", "--out-dir", str(tmp_path), "--window", "30"])
+    assert res.returncode == 0, f"stderr: {res.stderr}"
+    assert "WARNING" in res.stderr and "label fields are null" in res.stderr
+    data = json.loads((tmp_path / "TST_basecomp.json").read_text())
+    assert data["window"] == 30
+    # r_mechA_pas_1: window [9950, 9980) holds 20 planted A's then C's.
+    ma_pas = data["buckets"]["MechA_PAS+"]
+    assert ma_pas["median"] == pytest.approx(20 / 30) and ma_pas["frac_ge_60"] == 1.0
+    for b in BUCKETS:
+        d = data["buckets"][b]
+        assert all(d[k] is None for k in ("n_site", "n_templated", "n_nontemplated",
+                                          "n_ambiguous", "frac_templated",
+                                          "frac_nontemplated", "frac_ambiguous")), b
 
 
 @pytest.mark.parametrize("anchor", [None, "alignment_end", "a_run_start"])
