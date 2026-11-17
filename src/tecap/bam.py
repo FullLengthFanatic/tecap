@@ -19,9 +19,11 @@ from tecap.constants import (
     MECH_A_CORRECT,
     MECH_B_APA,
     ORIENT_MIN_FRAC,
+    SITE_ANCHOR_DEFAULT,
     UTR_BIN_LABELS,
 )
 from tecap.polya import utr_bin
+from tecap.site import read_site
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ _WORKER = {
     "cov_threshold": None,
     "min_mapq":      None,
     "cb_tag":        None,
+    "site_anchor":   None,
 }
 
 
@@ -63,6 +66,7 @@ def _empty_accumulator():
         "pas_counts":           {MECH_A_CORRECT: {"pas": 0, "nopas": 0},
                                   MECH_B_APA:     {"pas": 0, "nopas": 0}},
         "orient":               {"match": 0, "mismatch": 0},
+        "site":                 {"observed": 0, "fallback": 0},
         "mecha_read_lengths":    [],
         "capt_read_lengths":     [],
         "mecha_cov_scatter":     [],
@@ -96,6 +100,8 @@ def _merge_accumulator(dst, src):
         dst["pas_counts"][cat]["nopas"] += src["pas_counts"][cat]["nopas"]
     dst["orient"]["match"]    += src["orient"]["match"]
     dst["orient"]["mismatch"] += src["orient"]["mismatch"]
+    dst["site"]["observed"]   += src["site"]["observed"]
+    dst["site"]["fallback"]   += src["site"]["fallback"]
     dst["mecha_read_lengths"].extend(src["mecha_read_lengths"])
     dst["capt_read_lengths"].extend(src["capt_read_lengths"])
     dst["mecha_cov_scatter"].extend(src["mecha_cov_scatter"])
@@ -126,6 +132,7 @@ def _process_chrom(chrom):
     cov_threshold = _WORKER["cov_threshold"]
     min_mapq      = _WORKER["min_mapq"]
     cb_tag        = _WORKER["cb_tag"]
+    site_anchor   = _WORKER["site_anchor"]
 
     acc = _empty_accumulator()
     try:
@@ -168,7 +175,10 @@ def _process_chrom(chrom):
             continue
 
         rec = gene_records[best_gid]
-        cat, cov, _, has_pas = classify_read(read, rec, polya_index, cov_threshold)
+        site, observed = read_site(read, rec["strand"], site_anchor)
+        acc["site"]["observed" if observed else "fallback"] += 1
+        cat, cov, _, has_pas = classify_read(read, rec, polya_index, cov_threshold,
+                                             read_3prime=site)
         acc["counts"][cat] += 1
         acc["cov_fracs"][cat].append(cov)
 
@@ -225,7 +235,7 @@ def _populated_contigs(bam_path):
 
 def analyse_bam(bam_path, gene_index, gene_records, polya_index,
                 cov_threshold, min_mapq, threads=1, cb_tag=None,
-                cb_probe_reads=10_000):
+                cb_probe_reads=10_000, site_anchor=SITE_ANCHOR_DEFAULT):
     """Process a BAM in parallel by contig. Returns a results dict matching
     the v0.1 JSON schema.
 
@@ -233,6 +243,10 @@ def analyse_bam(bam_path, gene_index, gene_records, polya_index,
     the pool is forked from a parent that has placed the gene/polyA indices
     in module-level globals, so workers inherit them via copy-on-write rather
     than receive them through pickle.
+
+    site_anchor picks the read 3' end used for classification (see
+    tecap.site.read_site); "site" counts the reads whose site was observed
+    and those that fell back to the alignment end.
     """
 
     probed_cb_tag = cb_tag
@@ -250,6 +264,7 @@ def analyse_bam(bam_path, gene_index, gene_records, polya_index,
     _WORKER["cov_threshold"] = cov_threshold
     _WORKER["min_mapq"]      = min_mapq
     _WORKER["cb_tag"]        = probed_cb_tag
+    _WORKER["site_anchor"]   = site_anchor
 
     merged = _empty_accumulator()
 
@@ -295,6 +310,7 @@ def analyse_bam(bam_path, gene_index, gene_records, polya_index,
         "cov_fracs":             dict(merged["cov_fracs"]),
         "pas_counts":            merged["pas_counts"],
         "orient":                merged["orient"],
+        "site":                  merged["site"],
         "mecha_read_lengths":    merged["mecha_read_lengths"],
         "capt_read_lengths":     merged["capt_read_lengths"],
         "mecha_cov_scatter":     merged["mecha_cov_scatter"],

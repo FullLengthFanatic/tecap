@@ -1,7 +1,9 @@
 """Tests for downstream base composition utilities."""
 
 import pysam
+import pytest
 
+from tecap import basecomp
 from tecap.basecomp import analyse, downstream_window, pct_a, rc, summarise
 from tecap.gtf import build_gene_index
 from tecap.polya import build_polya_index
@@ -46,7 +48,7 @@ def test_analyse_end_to_end(synthetic_fixture):
     gene_index, gene_records = build_gene_index(fx["gtf"])
     polya_index = build_polya_index(fx["polya"], slop=25,
                                     allowed_types={"TE", "DS", "DI", "EX"})
-    pct_a_by_bucket, bucket_counts, _ = analyse(
+    pct_a_by_bucket, bucket_counts, _, _ = analyse(
         bam_path=fx["bam"], fasta_path=fx["fasta"],
         gene_index=gene_index, gene_records=gene_records,
         polya_index=polya_index,
@@ -65,7 +67,7 @@ def test_analyse_reports_orientation(synthetic_fixture):
     gene_index, gene_records = build_gene_index(fx["gtf"])
     polya_index = build_polya_index(fx["polya"], slop=25,
                                     allowed_types={"TE", "DS", "DI", "EX"})
-    _, _, orient = analyse(
+    _, _, orient, _ = analyse(
         bam_path=fx["bam"], fasta_path=fx["fasta"],
         gene_index=gene_index, gene_records=gene_records,
         polya_index=polya_index,
@@ -74,6 +76,35 @@ def test_analyse_reports_orientation(synthetic_fixture):
     # Every synthetic read is correctly oriented (GA forward/+, GB reverse/-).
     assert orient["match"] + orient["mismatch"] > 0
     assert orient["mismatch"] == 0
+
+
+@pytest.mark.parametrize("anchor, offset, n_a", [
+    ("a_run_start",   0, 10),    # window [P, P+20): the 10 planted A's, then C's
+    ("alignment_end", 10, 0),    # window [P+10, P+30): C's only
+])
+def test_window_of_internal_kept_follows_the_anchor(synthetic_fixture, monkeypatch,
+                                                    anchor, offset, n_a):
+    fx = synthetic_fixture
+    p = fx["internal_kept_site"]
+    windows = {}
+
+    def spy(fasta, chrom, pos, strand, win):
+        windows[pos] = downstream_window(fasta, chrom, pos, strand, win)
+        return windows[pos]
+
+    monkeypatch.setattr(basecomp, "downstream_window", spy)
+    gene_index, gene_records = build_gene_index(fx["gtf"])
+    polya_index = build_polya_index(fx["polya"], slop=25,
+                                    allowed_types={"TE", "DS", "DI", "EX"})
+    analyse(
+        bam_path=fx["bam"], fasta_path=fx["fasta"],
+        gene_index=gene_index, gene_records=gene_records,
+        polya_index=polya_index,
+        cov_threshold=0.5, min_mapq=0, window=20, threads=1,
+        site_anchor=anchor,
+    )
+    assert windows[p + offset].count("A") == n_a
+    assert p + 10 - offset not in windows
 
 
 def test_summarise_stamps_thresholds():

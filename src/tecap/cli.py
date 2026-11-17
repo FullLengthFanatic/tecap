@@ -8,7 +8,14 @@ import sys
 import numpy as np
 
 from tecap import __version__
-from tecap.constants import CATEGORIES, MECH_A_CORRECT, MECH_B_APA, UTR_BIN_LABELS
+from tecap.constants import (
+    CATEGORIES,
+    MECH_A_CORRECT,
+    MECH_B_APA,
+    SITE_ANCHOR_DEFAULT,
+    SITE_ANCHORS,
+    UTR_BIN_LABELS,
+)
 
 PLATFORMS_OK = ("cdna-pacbio", "cdna-ont")
 PLATFORMS_REFUSED = {
@@ -51,6 +58,12 @@ def _add_common_indexing_args(p):
     p.add_argument("--coverage-threshold", type=float, default=0.5)
     p.add_argument("--platform", default="cdna-pacbio",
                    help="Platform: cdna-pacbio or cdna-ont. drna-ont is refused.")
+    p.add_argument("--site-anchor", choices=SITE_ANCHORS, default=SITE_ANCHOR_DEFAULT,
+                   help="Read 3' end used to classify reads and, in basecomp, to "
+                        "start the downstream window: alignment_end, or "
+                        "a_run_start (where the read's terminal A run starts; the "
+                        "alignment end when the read has no run). "
+                        f"Default {SITE_ANCHOR_DEFAULT}.")
     p.add_argument("--threads", type=int, default=1,
                    help="Number of worker processes (contig-level parallelism).")
     p.add_argument("--verbose", action="store_true")
@@ -266,6 +279,7 @@ def _cmd_classify(args):
         min_mapq      = args.min_mapq,
         threads       = args.threads,
         cb_tag        = args.cell_barcode_tag,
+        site_anchor   = args.site_anchor,
     )
     results["sample"] = args.sample
 
@@ -280,6 +294,8 @@ def _cmd_classify(args):
         "fractions":            results["fractions"],
         "polya_slop":           args.polya_slop,
         "polya_types":          args.polya_types,
+        "site_anchor":          args.site_anchor,
+        "site_counts":          results["site"],
         "pas_counts":           pas,
         "pas_fraction":         {k: (v["pas"] / (v["pas"] + v["nopas"])
                                       if (v["pas"] + v["nopas"]) else None)
@@ -370,7 +386,7 @@ def _cmd_basecomp(args):
                                     slop=args.polya_slop,
                                     allowed_types=allowed_types)
 
-    pct_a_by_bucket, _, orient = analyse(
+    pct_a_by_bucket, _, orient, site_stats = analyse(
         bam_path      = args.bam,
         fasta_path    = args.fasta,
         gene_index    = gene_index,
@@ -380,6 +396,7 @@ def _cmd_basecomp(args):
         min_mapq      = args.min_mapq,
         window        = args.window,
         threads       = args.threads,
+        site_anchor   = args.site_anchor,
     )
 
     orient_total = orient["match"] + orient["mismatch"]
@@ -391,6 +408,8 @@ def _cmd_basecomp(args):
     summary["window"]            = args.window
     summary["polya_slop"]        = args.polya_slop
     summary["polya_types"]       = args.polya_types
+    summary["site_anchor"]       = args.site_anchor
+    summary["site_counts"]       = site_stats
     summary["orient_match_frac"] = orient_match_frac
 
     warn_if_unstranded(orient_match_frac, log)

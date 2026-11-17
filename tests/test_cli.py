@@ -5,6 +5,10 @@ import json
 import subprocess
 import sys
 
+import pytest
+
+from tecap.constants import SITE_ANCHOR_DEFAULT
+
 
 def _run_cli(args, cwd=None):
     cmd = [sys.executable, "-m", "tecap", *args]
@@ -105,6 +109,41 @@ def test_basecomp_json_is_self_describing(synthetic_fixture, tmp_path):
     # The regime cutoffs that produced frac_* are stamped into the file.
     assert data["thresholds"]["frac_ge_60"] == 0.60
     assert data["thresholds"]["frac_30_50"] == [0.30, 0.50]
+
+
+@pytest.mark.parametrize("anchor", [None, "alignment_end", "a_run_start"])
+def test_site_anchor_and_counts_in_both_jsons(synthetic_fixture, tmp_path, anchor):
+    fx = synthetic_fixture
+    n_reads = len(fx["expected_buckets"])
+    used = anchor or SITE_ANCHOR_DEFAULT
+    # Only r_internal_kept carries a terminal A run; the other reads are C's.
+    want = ({"observed": n_reads, "fallback": 0} if used == "alignment_end"
+            else {"observed": 1, "fallback": n_reads - 1})
+    common = ["--bam", fx["bam"], "--gtf", fx["gtf"], "--polya-sites", fx["polya"],
+              "--sample", "TST", "--out-dir", str(tmp_path)]
+    if anchor is not None:
+        common += ["--site-anchor", anchor]
+
+    for cmd, extra, json_name in (
+        ("classify", [], "TST_terminal_exon.json"),
+        ("basecomp", ["--fasta", fx["fasta"]], "TST_basecomp.json"),
+    ):
+        res = _run_cli([cmd, *common, *extra])
+        assert res.returncode == 0, f"{cmd} stderr: {res.stderr}"
+        data = json.loads((tmp_path / json_name).read_text())
+        assert data["site_anchor"] == used, cmd
+        assert data["site_counts"] == want, cmd
+        if cmd == "classify":
+            assert data["total"] == n_reads
+
+
+def test_unknown_site_anchor_is_refused(synthetic_fixture, tmp_path):
+    res = _run_cli(["classify", "--bam", synthetic_fixture["bam"],
+                    "--gtf", synthetic_fixture["gtf"],
+                    "--polya-sites", synthetic_fixture["polya"],
+                    "--out-dir", str(tmp_path), "--site-anchor", "alignment-end"])
+    assert res.returncode == 2
+    assert "--site-anchor: invalid choice" in res.stderr
 
 
 def test_explain_lists_all_mechanisms():

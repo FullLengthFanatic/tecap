@@ -30,7 +30,9 @@ from tecap.constants import (
     MECH_B_APA,
     MECH_B_ASPECI,
     MECH_B_EXON,
+    SITE_ANCHOR_DEFAULT,
 )
+from tecap.site import read_site
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +49,7 @@ _WORKER = {
     "cov_threshold": None,
     "min_mapq":      None,
     "window":        None,
+    "site_anchor":   None,
 }
 
 
@@ -107,25 +110,27 @@ def _process_chrom_bc(chrom):
     cov_threshold = _WORKER["cov_threshold"]
     min_mapq      = _WORKER["min_mapq"]
     window        = _WORKER["window"]
+    site_anchor   = _WORKER["site_anchor"]
 
     pct_a_by_bucket = defaultdict(list)
     counts          = defaultdict(int)
     n_no_seq        = 0
     orient          = {"match": 0, "mismatch": 0}
+    site_stats      = {"observed": 0, "fallback": 0}
 
     try:
         bam   = pysam.AlignmentFile(bam_path, "rb")
         fasta = pysam.FastaFile(fasta_path)
     except Exception as e:
         log.error("Failed to open BAM or FASTA for contig %s: %s", chrom, e)
-        return pct_a_by_bucket, counts, 0, orient
+        return pct_a_by_bucket, counts, 0, orient, site_stats
 
     try:
         iterator = bam.fetch(contig=chrom)
     except ValueError:
         bam.close()
         fasta.close()
-        return pct_a_by_bucket, counts, 0, orient
+        return pct_a_by_bucket, counts, 0, orient, site_stats
 
     for read in iterator:
         if (read.is_unmapped or read.is_secondary or
@@ -160,12 +165,15 @@ def _process_chrom_bc(chrom):
         else:
             orient["mismatch"] += 1
 
-        cat, _, r3p, has_pas = classify_read(read, rec, polya_index, cov_threshold)
+        site, observed = read_site(read, rec["strand"], site_anchor)
+        site_stats["observed" if observed else "fallback"] += 1
+        cat, _, _, has_pas = classify_read(read, rec, polya_index, cov_threshold,
+                                           read_3prime=site)
         bucket = assign_bucket(cat, has_pas)
         if bucket is None:
             continue
 
-        seq = downstream_window(fasta, chrom, r3p, rec["strand"], window)
+        seq = downstream_window(fasta, chrom, site, rec["strand"], window)
         a = pct_a(seq)
         if a is None:
             n_no_seq += 1
@@ -176,7 +184,7 @@ def _process_chrom_bc(chrom):
 
     bam.close()
     fasta.close()
-    return pct_a_by_bucket, counts, n_no_seq, orient
+    return pct_a_by_bucket, counts, n_no_seq, orient, site_stats
 
 
 def _populated_contigs(bam_path):
@@ -192,7 +200,15 @@ def _populated_contigs(bam_path):
 
 
 def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
-            cov_threshold, min_mapq, window, threads=1):
+            cov_threshold, min_mapq, window, threads=1,
+            site_anchor=SITE_ANCHOR_DEFAULT):
+    """Returns (pct_a_by_bucket, bucket_counts, orient, site_stats).
+
+    site_anchor picks the read 3' end used for classification and as the
+    start of the downstream window (see tecap.site.read_site); site_stats
+    counts the reads whose site was observed and those that fell back to
+    the alignment end.
+    """
     contigs = _populated_contigs(bam_path)
     log.info("Basecomp analysing %d populated contigs with %d worker(s) (window=%d)",
              len(contigs), threads, window)
@@ -205,16 +221,18 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     _WORKER["cov_threshold"] = cov_threshold
     _WORKER["min_mapq"]      = min_mapq
     _WORKER["window"]        = window
+    _WORKER["site_anchor"]   = site_anchor
 
     pct_a_by_bucket = defaultdict(list)
     bucket_counts   = defaultdict(int)
     n_no_seq_total  = 0
     orient          = {"match": 0, "mismatch": 0}
+    site_stats      = {"observed": 0, "fallback": 0}
 
     try:
         if threads <= 1:
             results_iter = (_process_chrom_bc(c) for c in contigs)
-            for pab, cnt, nns, ori in results_iter:
+            for pab, cnt, nns, ori, sst in results_iter:
                 for b, vs in pab.items():
                     pct_a_by_bucket[b].extend(vs)
                 for b, v in cnt.items():
@@ -222,10 +240,12 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
                 n_no_seq_total += nns
                 orient["match"]    += ori["match"]
                 orient["mismatch"] += ori["mismatch"]
+                site_stats["observed"] += sst["observed"]
+                site_stats["fallback"] += sst["fallback"]
         else:
             ctx = mp.get_context("fork")
             with ctx.Pool(processes=threads) as pool:
-                for pab, cnt, nns, ori in pool.imap_unordered(_process_chrom_bc, contigs):
+                for pab, cnt, nns, ori, sst in pool.imap_unordered(_process_chrom_bc, contigs):
                     for b, vs in pab.items():
                         pct_a_by_bucket[b].extend(vs)
                     for b, v in cnt.items():
@@ -233,6 +253,8 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
                     n_no_seq_total += nns
                     orient["match"]    += ori["match"]
                     orient["mismatch"] += ori["mismatch"]
+                    site_stats["observed"] += sst["observed"]
+                    site_stats["fallback"] += sst["fallback"]
     finally:
         for k in _WORKER:
             _WORKER[k] = None
@@ -240,7 +262,7 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     log.info("Basecomp done; %s reads dropped for missing/short window",
              f"{n_no_seq_total:,}")
 
-    return pct_a_by_bucket, dict(bucket_counts), orient
+    return pct_a_by_bucket, dict(bucket_counts), orient, site_stats
 
 
 def summarise(pct_a_by_bucket):

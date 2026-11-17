@@ -50,9 +50,17 @@ POLYA_CLUSTERS = [
 ]
 
 
+# Site of r_internal_kept: 10 templated A's are planted at [P, P+10) in the
+# UTR of GENE_A, away from the planted stretches, the polyA clusters and the
+# downstream windows of the other reads.
+INTERNAL_KEPT_SITE = 8700
+
+
 # (name, gid, start, cigar_ops)  — CIGAR ops: 0=M, 3=N
 # reference_start/reference_end forms a box used by classify_read; the CIGAR
-# just needs at least one N so multi-exon filter passes.
+# just needs at least one N so multi-exon filter passes. An optional fifth
+# element is the read sequence; the default is all C's, so a read has no
+# terminal A run. Soft clips (op 4) count toward the sequence length.
 READS = [
     # GENE_A (TE=[7000,10000], CDS ends at 8000, threshold 0.5):
     # CAPTURED: cov = 2000/3000 = 0.67
@@ -73,6 +81,11 @@ READS = [
     ("r_mechB_aspeci_1",  "GA", 1000, [(0, 200), (3, 2800), (0,  200)]),
     # MECH_C: 3'=10500 past te_end
     ("r_mechC_1",         "GA", 9500, [(0, 200), (3,  300), (0,  500)]),
+    # Vector L2 of tests/test_site.py in GENE_A: aligned through P+10 over the
+    # planted A's, then 30 clipped A's and 33 clipped G's. ref=[3000,8710],
+    # cov = 1710/3000 = 0.57 -> CAPTURED; alignment end 8710, site P=8700.
+    ("r_internal_kept",   "GA", 3000, [(0, 500), (3, 3500), (0, 1710), (4, 63)],
+     "C" * 2200 + "A" * 40 + "G" * 33),
 
     # GENE_C: non-coding TE, cov=0.1, 3'=22200 in TE → MECH_A_NO_CDS
     ("r_mechA_nocds_1",   "GC", 20200, [(0, 200), (3, 1600), (0, 200)]),
@@ -94,6 +107,7 @@ EXPECTED_BUCKETS = {
     "r_mechB_exon_1":   "MechB-exon: upstream TE, priming on upstream exon",
     "r_mechB_aspeci_1": "MechB-aspecific: upstream TE, intronic/flanking",
     "r_mechC_1":        "MechC: downstream of TE",
+    "r_internal_kept":  "Captured (>=50%)",
     "r_mechA_nocds_1":  "MechA: in TE, non-coding gene",
     "r_captured_B":     "Captured (>=50%)",
 }
@@ -111,6 +125,8 @@ def _build_fasta(path):
     # Planted A-stretches for basecomp tests:
     seq[9950:9970] = b"A" * 20   # downstream of r_mechA_pas_1's 3' end
     seq[8450:8470] = b"A" * 20   # downstream of r_mechA_nopas_1's 3' end
+    # templated A's at r_internal_kept's site, upstream of its alignment end
+    seq[INTERNAL_KEPT_SITE:INTERNAL_KEPT_SITE + 10] = b"A" * 10
 
     with open(path, "w") as f:
         f.write(f">{CONTIG}\n")
@@ -147,11 +163,11 @@ def _build_bam(sorted_path):
     }
     unsorted = sorted_path + ".unsorted.bam"
     with pysam.AlignmentFile(unsorted, "wb", header=header) as bam:
-        for (name, gid, start, cigar) in READS:
+        for (name, gid, start, cigar, *seq) in READS:
             a = pysam.AlignedSegment()
             a.query_name = name
-            qlen = sum(length for op, length in cigar if op == 0)
-            a.query_sequence  = "A" * qlen
+            qlen = sum(length for op, length in cigar if op in (0, 1, 4, 7, 8))
+            a.query_sequence  = seq[0] if seq else "C" * qlen
             a.query_qualities = pysam.qualitystring_to_array("I" * qlen)
             a.flag            = 16 if gid == "GB" else 0  # reverse for minus gene
             a.reference_id    = 0
@@ -185,4 +201,5 @@ def synthetic_fixture(tmp_path_factory):
         "reads":    READS,
         "expected_buckets": EXPECTED_BUCKETS,
         "expected_has_pas": EXPECTED_HAS_PAS,
+        "internal_kept_site": INTERNAL_KEPT_SITE,
     }

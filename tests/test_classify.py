@@ -3,6 +3,12 @@
 import pysam
 
 from tecap.classify import classify_read
+from tecap.constants import (
+    INTERNAL_PRIME_TE_CDS,
+    MECH_A_CORRECT,
+    MECH_B_EXON,
+    MECH_C,
+)
 from tecap.gtf import build_gene_index
 from tecap.polya import build_polya_index
 
@@ -60,3 +66,36 @@ def test_every_read_classifies_as_expected(synthetic_fixture):
     assert set(seen) == set(expected), (
         f"missing reads: expected {set(expected)}, got {set(seen)}"
     )
+
+
+def _read_named(bam, name):
+    return next(r for r in bam.fetch(until_eof=True) if r.query_name == name)
+
+
+def test_read_3prime_replaces_the_alignment_end(synthetic_fixture):
+    _, gene_records, polya_index = _load_indices(synthetic_fixture)
+    p = synthetic_fixture["internal_kept_site"]
+    with pysam.AlignmentFile(synthetic_fixture["bam"], "rb") as bam:
+        read = _read_named(bam, "r_internal_kept")
+        rec = gene_records["GA"]
+        _, cov_end, r3p_end, _ = classify_read(read, rec, polya_index, 0.5)
+        _, cov_site, r3p_site, _ = classify_read(read, rec, polya_index, 0.5,
+                                                 read_3prime=p)
+    assert r3p_end == p + 10
+    assert r3p_site == p
+    assert cov_site == cov_end
+
+
+def test_read_3prime_drives_every_position_test(synthetic_fixture):
+    # r_mechA_intutr_1: alignment end 8300 (MechA-internalUTR), cov 0.40.
+    _, gene_records, polya_index = _load_indices(synthetic_fixture)
+    with pysam.AlignmentFile(synthetic_fixture["bam"], "rb") as bam:
+        read = _read_named(bam, "r_mechA_intutr_1")
+        rec = gene_records["GA"]
+        got = {r3p: classify_read(read, rec, polya_index, 0.5, read_3prime=r3p)
+               for r3p in (9950, 7500, 3200, 10500)}
+    assert got[9950][0] == MECH_A_CORRECT and got[9950][3] is True
+    assert got[7500][0] == INTERNAL_PRIME_TE_CDS
+    assert got[3200][0] == MECH_B_EXON
+    assert got[10500][0] == MECH_C
+    assert {r3p: g[2] for r3p, g in got.items()} == {r: r for r in got}

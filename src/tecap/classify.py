@@ -14,11 +14,15 @@ from tecap.constants import (
 from tecap.polya import hits_polya, in_upstream_exon
 
 
-def classify_read(read, gene_rec, polya_index, cov_threshold):
+def classify_read(read, gene_rec, polya_index, cov_threshold, read_3prime=None):
     """Returns (category, cov_frac, read_3prime, has_pas).
 
     has_pas is True iff the 3' end falls within a polyA cluster that carries
     a canonical PAS hexamer. Only meaningful for MECH_A_CORRECT and MECH_B_APA.
+
+    read_3prime, when given (the read's site, tecap.site.read_site), replaces
+    the alignment end in every position test. Coverage of the terminal exon
+    stays on the alignment coordinates.
     """
     strand   = gene_rec["strand"]
     te_start = gene_rec["te_start"]
@@ -27,10 +31,11 @@ def classify_read(read, gene_rec, polya_index, cov_threshold):
     chrom    = gene_rec["chrom"]
     cds_end  = gene_rec["cds_end_genomic"]
 
-    if strand == "+":
-        read_3prime = read.reference_end
-    else:
-        read_3prime = read.reference_start
+    if read_3prime is None:
+        if strand == "+":
+            read_3prime = read.reference_end
+        else:
+            read_3prime = read.reference_start
 
     overlap  = max(0, min(read.reference_end, te_end) -
                       max(read.reference_start, te_start))
