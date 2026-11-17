@@ -171,7 +171,7 @@ def test_single_report_contains_all_mechanisms(tmp_path):
     assert "S1" in html
     assert "Executive summary" in html
     assert "Mechanism legend" in html
-    assert "schema 0.1" in html.lower() or 'schema 0.1' in html
+    assert "schema 0.2" in html.lower() or 'schema 0.2' in html
 
     counts = _count(html)
     assert counts.tables >= 3

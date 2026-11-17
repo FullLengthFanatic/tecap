@@ -57,7 +57,7 @@ Run `tecap explain` to print these definitions on the terminal, or
 ## Install
 
 ```bash
-pip install git+https://github.com/FullLengthFanatic/tecap@v0.4.0
+pip install git+https://github.com/FullLengthFanatic/tecap@v0.5.0
 ```
 
 Development install:

@@ -114,7 +114,7 @@ LABELS              = ("templated", "nontemplated", "ambiguous")
 DEFINITION_SOURCE   = "flight-polyafilter-bench 1.2.0"
 
 
-SCHEMA_VERSION = "0.1"
+SCHEMA_VERSION = "0.2"
 
 
 # Mechanism glossary -- single source of truth for README, HTML report,

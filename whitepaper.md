@@ -2,7 +2,7 @@
 
 **3' terminal exon capture diagnostics for long-read single-cell RNA-seq.**
 
-Version 0.4.0. MIT licensed. [github.com/FullLengthFanatic/tecap](https://github.com/FullLengthFanatic/tecap) · [doi:10.5281/zenodo.19762736](https://doi.org/10.5281/zenodo.19762736)
+Version 0.5.0. MIT licensed. [github.com/FullLengthFanatic/tecap](https://github.com/FullLengthFanatic/tecap) · [doi:10.5281/zenodo.19762736](https://doi.org/10.5281/zenodo.19762736)
 
 ---
 
@@ -121,7 +121,7 @@ Direct-RNA sequencing is refused at the command line on purpose. There is no rev
 
 ### Outputs
 
-Per sample, `classify` writes a JSON (bucket counts and fractions, PAS split, UTR-bin stratification, read-length medians, orientation fraction; schema version 0.1), a three-panel summary PNG, a MechA-correct scatter PNG, and a MultiQC custom-content JSON. An optional per-gene TSV gives bucket counts per gene. `basecomp` writes a per-bucket %A histogram JSON and an eight-panel histogram PNG.
+Per sample, `classify` writes a JSON (bucket counts and fractions, PAS split, UTR-bin stratification, read-length medians, orientation fraction; schema version 0.2), a three-panel summary PNG, a MechA-correct scatter PNG, and a MultiQC custom-content JSON. An optional per-gene TSV gives bucket counts per gene. `basecomp` writes a per-bucket %A histogram JSON and an eight-panel histogram PNG.
 
 `tecap report` renders a **single self-contained HTML file** with embedded plots, an executive summary, the mechanism legend, per-bucket tables, the PAS split, UTR-length stratification, and a glossary. No JavaScript, no external CSS, no CDN. It runs for one sample or side-by-side across many. `tecap compare` produces just the cross-sample comparison plots, and `tecap explain` prints the bucket definitions at the terminal.
 
@@ -203,7 +203,7 @@ These are limitations of the method and its scope, separate from the engineering
 - **The 20 nt window is short.** A 30 or 40 nt window might resolve the 30% to 50% A signature more cleanly. The window size is configurable; the 30/50/60% A band edges are not, currently, and the labels are defined for the 20 nt window only (with any other `--window` the label fields are null).
 - **The 50% coverage threshold is arbitrary.** It sets the Captured vs MechA-correct boundary. Bucket *ordering* across samples is stable to the choice, but absolute percentages move with it.
 - **The polyA atlas is imperfect.** PolyASite inherits internal-priming artifacts from its source data. The PAS+/PAS- split mitigates this but does not eliminate it: a genuine non-canonical polyA event can be PAS-.
-- **Stranded input is assumed, and not enforced.** tecap uses the gene strand to define "downstream" and to look for the read's terminal adenine run. An unstranded BAM dilutes the signal toward the genomic mean. The `PBMC_FS_ONT` sample (orientation match 0.495, meaning random strand because pychopper was not run upstream) is a worked example: its basecomp numbers are conservative bounds, not point estimates. tecap reports the orientation match fraction, and in the development version after 0.4.0 both `classify` and `basecomp` warn when it drops below 0.80, the signature of unstranded input. The guard surfaces the problem; it does not fix it. tecap still writes the diluted metrics rather than correcting or refusing the run, so orienting reads with pychopper / cdna_classifier upstream remains the real fix.
+- **Stranded input is assumed, and not enforced.** tecap uses the gene strand to define "downstream" and to look for the read's terminal adenine run. An unstranded BAM dilutes the signal toward the genomic mean. The `PBMC_FS_ONT` sample (orientation match 0.495, meaning random strand because pychopper was not run upstream) is a worked example: its basecomp numbers are conservative bounds, not point estimates. tecap reports the orientation match fraction, and from 0.5.0 both `classify` and `basecomp` warn when it drops below 0.80, the signature of unstranded input. The guard surfaces the problem; it does not fix it. tecap still writes the diluted metrics rather than correcting or refusing the run, so orienting reads with pychopper / cdna_classifier upstream remains the real fix.
 - **It depends on annotation.** Genes or 3' ends absent from the GTF, or transcripts with unannotated 3' UTR extensions, are mis-bucketed (often into MechC). Novel-isoform discovery is out of scope.
 - **Only multi-exon reads are analyzed.** Single-exon transcripts and intronless genes are not classified.
 - **Direct-RNA is unsupported by design.** No RT, no oligo-dT, nothing to diagnose.
@@ -214,7 +214,7 @@ These are limitations of the method and its scope, separate from the engineering
 ## 7. Availability and citation
 
 ```bash
-pip install git+https://github.com/FullLengthFanatic/tecap@v0.4.0
+pip install git+https://github.com/FullLengthFanatic/tecap@v0.5.0
 ```
 
 A typical run, with references auto-fetched and cached on first use:

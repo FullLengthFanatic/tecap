@@ -49,7 +49,7 @@ def test_classify_end_to_end(synthetic_fixture, tmp_path):
     j = out / "TST_terminal_exon.json"
     assert j.exists()
     data = json.loads(j.read_text())
-    assert data["schema_version"] == "0.1"
+    assert data["schema_version"] == "0.2"
     assert data["platform"] == "cdna-pacbio"
     assert data["sample"] == "TST"
     assert data["total"] > 0
@@ -84,7 +84,7 @@ def test_basecomp_end_to_end(synthetic_fixture, tmp_path):
     j = out / "TST_basecomp.json"
     assert j.exists()
     data = json.loads(j.read_text())
-    assert data["schema_version"] == "0.1"
+    assert data["schema_version"] == "0.2"
     assert data["sample"] == "TST"
     assert data["window"] == 20
 
