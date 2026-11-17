@@ -92,6 +92,23 @@ BASECOMP_GE_MID = 0.40   # frac_ge_40
 BASECOMP_HIST_N = 21     # bin edges over [0, 1] -> 5% histogram bins
 
 
+# Internal-priming definition shared with flight-polyafilter-bench
+# (docs/definition.json there, copied to tests/data/definition.json).
+# Site: alignment_end is the aligned 3' end; a_run_start is where the read's
+# terminal A run starts, when the run has at least SITE_RUN_MIN A's with up
+# to SITE_RUN_TOLERANCE interior non-A bases. Label: A count in the
+# LABEL_WINDOW nt reference window downstream of the site.
+SITE_ANCHORS        = ("alignment_end", "a_run_start")
+SITE_ANCHOR_DEFAULT = "a_run_start"
+SITE_RUN_MIN        = 10
+SITE_RUN_TOLERANCE  = 1
+LABEL_WINDOW        = 20
+TEMPLATED_MIN       = 8
+NONTEMPLATED_MAX    = 4
+LABELS              = ("templated", "nontemplated", "ambiguous")
+DEFINITION_SOURCE   = "flight-polyafilter-bench 1.2.0"
+
+
 SCHEMA_VERSION = "0.1"
 
 
