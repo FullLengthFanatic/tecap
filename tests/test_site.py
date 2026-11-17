@@ -118,6 +118,14 @@ def test_read_antisense_to_the_gene_falls_back():          # Review Focus 1
     assert read_site(read, "-", "a_run_start") == (read.reference_start, False)
 
 
+@pytest.mark.parametrize("minus", [False, True])
+def test_record_without_sequence_falls_back(minus):         # SEQ "*"
+    read = segment(pos=900, cigar="50M100N50M", seq=None, flag=16 if minus else 0)
+    strand = "-" if minus else "+"
+    assert read_site(read, strand, "a_run_start") == (alignment_end(read, minus), False)
+    assert read_site(read, strand, "alignment_end") == (alignment_end(read, minus), True)
+
+
 def test_run_covering_the_whole_alignment():                # Review Focus 3
     read = segment(pos=990, cigar="15M", seq="A" * 15)
     assert read_site(read, "+", "a_run_start") == (990, True)

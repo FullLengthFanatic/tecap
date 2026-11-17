@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 
+import pysam
 import pytest
 
 from tecap.constants import SITE_ANCHOR_DEFAULT
@@ -135,6 +136,44 @@ def test_site_anchor_and_counts_in_both_jsons(synthetic_fixture, tmp_path, ancho
         assert data["site_counts"] == want, cmd
         if cmd == "classify":
             assert data["total"] == n_reads
+
+
+@pytest.mark.parametrize("threads", ["1", "2"])
+def test_records_without_sequence_fall_back(synthetic_fixture, tmp_path, threads):
+    """Primary spliced records stored without SEQ: both subcommands finish under
+    the default anchor, classify them as before and count them as fallback."""
+    fx = synthetic_fixture
+    bam_path = str(tmp_path / "noseq.bam")
+    header = {"HD": {"VN": "1.6", "SO": "coordinate"},
+              "SQ": [{"SN": fx["contig"], "LN": fx["contig_len"]}]}
+    with pysam.AlignmentFile(bam_path, "wb", header=header) as bam:
+        for name, gid, start, cigar, *_ in fx["reads"]:
+            if name not in ("r_captured_1", "r_captured_B"):   # one per strand
+                continue
+            a = pysam.AlignedSegment()
+            a.query_name      = name
+            a.flag            = 16 if gid == "GB" else 0
+            a.reference_id    = 0
+            a.reference_start = start
+            a.mapping_quality = 60
+            a.cigartuples     = cigar
+            bam.write(a)
+    pysam.index(bam_path)
+
+    common = ["--bam", bam_path, "--gtf", fx["gtf"], "--polya-sites", fx["polya"],
+              "--sample", "NOSEQ", "--out-dir", str(tmp_path), "--threads", threads]
+    res = _run_cli(["classify", *common])
+    assert res.returncode == 0, f"classify stderr: {res.stderr}"
+    data = json.loads((tmp_path / "NOSEQ_terminal_exon.json").read_text())
+    assert data["site_anchor"] == SITE_ANCHOR_DEFAULT == "a_run_start"
+    assert data["site_counts"] == {"observed": 0, "fallback": 2}
+    assert data["counts"]["Captured (>=50%)"] == data["total"] == 2
+
+    res = _run_cli(["basecomp", *common, "--fasta", fx["fasta"]])
+    assert res.returncode == 0, f"basecomp stderr: {res.stderr}"
+    data = json.loads((tmp_path / "NOSEQ_basecomp.json").read_text())
+    assert data["site_counts"] == {"observed": 0, "fallback": 2}
+    assert data["buckets"]["Captured"]["n"] == 2
 
 
 def test_unknown_site_anchor_is_refused(synthetic_fixture, tmp_path):

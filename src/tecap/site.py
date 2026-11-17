@@ -96,11 +96,14 @@ def terminal_a_run(read, minus: bool, tolerance: int = SITE_RUN_TOLERANCE) -> tu
 def read_site(read, strand: str, anchor: str) -> tuple[int, bool]:
     """(site, observed) on the gene strand. alignment_end: the aligned 3' end,
     always observed. a_run_start: the start of the terminal A run when it has
-    at least SITE_RUN_MIN A's, else the aligned 3' end and not observed."""
+    at least SITE_RUN_MIN A's, else the aligned 3' end and not observed. A
+    record stored without SEQ has no run to read and falls back."""
     minus = strand == "-"
     end = read.reference_start if minus else read.reference_end
     if anchor == "alignment_end":
         return end, True
+    if read.query_sequence is None:
+        return end, False
     site, aligned_a, clip_a = terminal_a_run(read, minus)
     if aligned_a + clip_a >= SITE_RUN_MIN:
         return site, True
