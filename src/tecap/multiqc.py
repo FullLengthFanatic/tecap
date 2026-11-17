@@ -64,7 +64,7 @@ def build_mqc_payload(sample, results, summary):
             },
             "mechb_aspeci_pct": {
                 "title": "MechB-aspecific %",
-                "description": "Internal priming upstream of TE, not at any known polyA site",
+                "description": "3' end upstream of TE in an intron or gene flank, not at any known polyA site",
                 "min": 0, "max": 100, "suffix": "%",
                 "format": "{:,.1f}",
             },

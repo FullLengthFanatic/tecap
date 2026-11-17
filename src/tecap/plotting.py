@@ -58,9 +58,9 @@ def _add_caption(fig, text):
 def _basecomp_legend_handles():
     return [
         Patch(facecolor="grey", alpha=0.25,
-              label="30-50% A: moderate-A priming"),
+              label="30% to 50% A"),
         Line2D([0], [0], color="black", linestyle="--", linewidth=1.0,
-               label=">=60% A: classical A-tract"),
+               label="60% A or more"),
     ]
 
 

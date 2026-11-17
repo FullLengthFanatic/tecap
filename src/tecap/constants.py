@@ -47,8 +47,9 @@ UTR_BIN_LABELS = ["0-500", "500-1k", "1k-2k", "2k-5k", ">5k"]
 
 # Below this BAM/gene-strand match fraction the input is most likely
 # unstranded (e.g. ONT cDNA not run through pychopper / cdna_classifier).
-# basecomp and the read 3' end are defined from the alignment strand, so
-# unstranded input dilutes those metrics toward the genomic mean.
+# basecomp and the read 3' end are defined from the gene strand, so in
+# unstranded input the reads antisense to their gene dilute those metrics
+# toward the genomic mean.
 ORIENT_MIN_FRAC = 0.80
 
 
@@ -82,13 +83,17 @@ BUCKET_COLORS = {
 }
 
 
-# Base composition regime thresholds applied in basecomp.summarise() and
+# Base composition band thresholds applied in basecomp.summarise() and
 # stamped into the basecomp JSON, so the cutoffs that produced frac_* are
 # recorded in the output rather than living only in code.
-BASECOMP_GE_HI  = 0.60   # classical A-tract regime (frac_ge_60)
-BASECOMP_MID_LO = 0.30   # moderate-A band, lower edge (frac_30_50)
-BASECOMP_MID_HI = 0.50   # moderate-A band, upper edge (frac_30_50)
-BASECOMP_GE_MID = 0.40   # frac_ge_40
+# `frac_ge_60`, `frac_30_50` and `frac_ge_40` are descriptive bands of the
+# adenine share in the window (60% or more, 30% to under 50%, 40% or more).
+# They do not name a priming mechanism. The label is in `frac_templated`,
+# `frac_nontemplated` and `frac_ambiguous`.
+BASECOMP_GE_HI  = 0.60   # 60% A or more (frac_ge_60)
+BASECOMP_MID_LO = 0.30   # 30% to under 50% A, lower edge (frac_30_50)
+BASECOMP_MID_HI = 0.50   # 30% to under 50% A, upper edge, excluded (frac_30_50)
+BASECOMP_GE_MID = 0.40   # 40% A or more (frac_ge_40)
 BASECOMP_HIST_N = 21     # bin edges over [0, 1] -> 5% histogram bins
 
 
@@ -129,12 +134,12 @@ MECHANISM_DEFINITIONS = {
     MECH_A_INTERNAL_UTR: {
         "short": "MechA-internalUTR",
         "what":  "Read 3' end is in the TE 3' UTR but not within +-25 bp of any annotated polyA cluster.",
-        "why":   "Internal oligo-dT priming on an A-rich stretch inside the UTR; classic mispriming signature.",
+        "why":   "Candidate internal priming site in the UTR; no annotated polyA cluster supports it.",
     },
     INTERNAL_PRIME_TE_CDS: {
         "short": "IP-TE-CDS",
         "what":  "Read 3' end is inside the terminal exon's CDS portion (i.e. before the UTR begins).",
-        "why":   "Internal priming on the coding portion of the TE; strong mispriming signal.",
+        "why":   "Candidate internal priming site; real polyA sites are rare in coding sequence.",
     },
     MECH_A_NO_CDS: {
         "short": "MechA-noCDS",
@@ -144,12 +149,12 @@ MECHANISM_DEFINITIONS = {
     MECH_B_APA: {
         "short": "MechB-APA",
         "what":  "Read 3' end is upstream of the terminal exon but at an annotated polyA cluster on an upstream exon.",
-        "why":   "Alternative polyadenylation isoform; biological, not a mispriming artifact.",
+        "why":   "Alternative polyadenylation isoform, supported by an annotated polyA cluster.",
     },
     MECH_B_EXON: {
         "short": "MechB-exon",
         "what":  "Read 3' end is on an upstream exon, with no annotated polyA cluster nearby.",
-        "why":   "Internal priming on an upstream exon's A-rich sequence.",
+        "why":   "Candidate internal priming site on an upstream exon; no annotated polyA cluster supports it.",
     },
     MECH_B_ASPECI: {
         "short": "MechB-aspecific",
@@ -174,12 +179,12 @@ BUCKET_DEFINITIONS = {
     BUCKET_MA_PAS: {
         "short": "MechA_PAS+",
         "what":  "MechA-correct reads at a polyA cluster carrying a canonical AAUAAA-like hexamer.",
-        "why":   "High-confidence real polyadenylation; the downstream window should not be A-rich.",
+        "why":   "High-confidence real polyadenylation; sites here should be mostly non-templated.",
     },
     BUCKET_MA_NOPAS: {
         "short": "MechA_PAS-",
         "what":  "MechA-correct reads at a polyA cluster without a canonical hexamer.",
-        "why":   "Weaker support for real cleavage; downstream-A enrichment here flags mispriming on A-rich UTR.",
+        "why":   "Weaker support for real cleavage; a templated label here marks a likely internal priming site.",
     },
     BUCKET_MB_APA_PAS: {
         "short": "MechB_APA_PAS+",
@@ -189,22 +194,22 @@ BUCKET_DEFINITIONS = {
     BUCKET_MB_APA_NOPAS: {
         "short": "MechB_APA_PAS-",
         "what":  "MechB-APA reads at an upstream cluster without a hexamer.",
-        "why":   "Candidate APA but unsupported; A-tract enrichment here suggests mispriming.",
+        "why":   "Candidate APA but unsupported; a templated label here marks a likely internal priming site.",
     },
     BUCKET_MB_EXON: {
         "short": "MechB_exon",
         "what":  "Reads with 3' end on an upstream exon, no polyA cluster.",
-        "why":   "Upstream-exon mispriming; the downstream window should be A-rich if oligo-dT-driven.",
+        "why":   "No polyA cluster supports the site; a templated label here marks a likely internal priming site.",
     },
     BUCKET_MB_ASPECI: {
         "short": "MechB_aspecific",
         "what":  "Reads with 3' end in an intron or gene flank upstream of the TE.",
-        "why":   "Pre-mRNA priming; tends to be A-rich at the cleavage point.",
+        "why":   "Pre-mRNA priming or off-target alignment; the label says whether the site is templated.",
     },
     BUCKET_IP_CDS: {
         "short": "IP_TE_CDS",
         "what":  "Reads with 3' end in the terminal exon's CDS portion.",
-        "why":   "Internal priming in CDS; strong mispriming signal.",
+        "why":   "Real polyA sites are rare in coding sequence; a templated label here marks a likely internal priming site.",
     },
 }
 
@@ -216,8 +221,8 @@ PLOT_CAPTIONS = {
         "Mechanism breakdown for {sample}. Left panel: fraction of multi-exon "
         "reads in each of the 9 buckets. Centre panel: read-length distribution "
         "for Captured vs MechA-correct. Right panel: rates of Captured and "
-        "MechA-correct stratified by 3' UTR length, where mispriming bias "
-        "concentrates."
+        "MechA-correct stratified by 3' UTR length, where capture failures "
+        "concentrate."
     ),
     "mecha_scatter": (
         "MechA-correct reads only: read length vs fraction of the terminal exon "
@@ -236,11 +241,9 @@ PLOT_CAPTIONS = {
     ),
     "basecomp": (
         "Per-bucket histograms of %A in the {window} nt reference window "
-        "immediately downstream of each cleavage site. Grey shading marks the "
-        "moderate-A regime (30-50% A); the dashed line marks classical A-tract "
-        "priming (>=60% A). Enrichment in the grey band reflects priming on "
-        "moderate-A sequence; enrichment past the dashed line reflects "
-        "priming on classical A-tracts. Empirically, single-cell prep "
+        "immediately downstream of each read's site. Grey shading marks 30% "
+        "to 50% A and the dashed line marks 60% A; both are descriptive bands "
+        "and do not name a priming mechanism. Empirically, single-cell prep "
         "datasets (10x, in-house FLASH-seq variants on the BD Rhapsody "
         "platform and on plates, ArgenTag) cluster in the grey band; "
         "bulk Iso-Seq datasets cluster past the dashed line. "
@@ -248,9 +251,9 @@ PLOT_CAPTIONS = {
     ),
     "comparison_basecomp": (
         "Cross-sample %A histograms in the {window} nt window downstream of "
-        "cleavage. Grey band: 30-50% A (moderate-A priming). Dashed line: "
-        ">=60% A (classical A-tract). Compare buckets across samples to spot "
-        "protocol-specific mispriming."
+        "each read's site. Grey band: 30% to 50% A. Dashed line: 60% A. Both "
+        "are descriptive bands, not priming mechanisms. Compare buckets across "
+        "samples to spot protocol-specific differences in downstream A content."
     ),
     "bucket_by_label": (
         "A bucket says where the site is. The label says what kind of site it "
@@ -272,8 +275,9 @@ REPORT_INTRO = {
         "one of nine mechanism buckets based on where its 3' end falls "
         "relative to the terminal exon, the 3' UTR, and a polyA cluster atlas. "
         "Reference base composition in a short window downstream of each "
-        "cleavage site is then summarised per bucket to flag internal-priming "
-        "artefacts. The mechanism legend below names every bucket; the plots "
+        "read's site is then summarised per bucket, and each observed site is "
+        "labelled templated, non-templated or ambiguous from the adenines in "
+        "that window. The mechanism legend below names every bucket; the plots "
         "and tables that follow break the sample down by bucket, by polyA "
         "hexamer status, and by 3' UTR length."
     ),
@@ -283,10 +287,11 @@ REPORT_INTRO = {
         "sample is classified into one of nine mechanism buckets based on "
         "where its 3' end falls relative to the terminal exon, the 3' UTR, "
         "and a polyA cluster atlas. Reference base composition in a short "
-        "window downstream of each cleavage site is summarised per bucket "
-        "to flag internal-priming artefacts. The plots and tables below put "
+        "window downstream of each read's site is summarised per bucket, and "
+        "each observed site is labelled templated, non-templated or ambiguous "
+        "from the adenines in that window. The plots and tables below put "
         "the samples side-by-side so that protocol-specific differences "
-        "(capture rate, read length, mispriming pattern) are directly "
+        "(capture rate, read length, templated share) are directly "
         "comparable. See the 'How to read this report' block before the "
         "first plot."
     ),
@@ -329,8 +334,7 @@ GLOSSARY = [
     ("CDS",
      "Coding sequence. The protein-coding portion of a transcript. "
      "Reads with 3' end inside the terminal exon's CDS portion (i.e. "
-     "before the UTR begins) are flagged as IP-TE-CDS, a strong "
-     "internal-priming signal."),
+     "before the UTR begins) are flagged as IP-TE-CDS."),
     ("polyA",
      "Polyadenylation. The 3' processing step that cleaves the pre-mRNA "
      "and adds a poly(A) tail. tecap uses the PolyASite atlas to know "
@@ -344,10 +348,23 @@ GLOSSARY = [
      "Alternative polyadenylation. Production of mRNA isoforms that "
      "differ in their 3' end through use of upstream polyA sites on "
      "earlier exons. MechB-APA captures these biological events and "
-     "distinguishes them from internal-priming artefacts."),
+     "keeps them apart from sites with no annotated polyA cluster."),
     ("oligo-dT",
      "A short DNA oligo of consecutive deoxythymidines, used in cDNA "
      "library prep to capture poly(A)-tailed mRNA. Internal priming "
      "happens when oligo-dT anneals to A-rich genomic stretches "
      "instead of the real poly(A) tail."),
+    ("site",
+     "Where on the reference the read was primed, on the gene strand. "
+     "With --site-anchor a_run_start (the default) it is where the read's "
+     "terminal adenine run starts, aligned and clipped adenines counted "
+     "together (10 or more, one other base allowed); with alignment_end, "
+     "or for a read without such a run, it is the alignment end. A bucket "
+     "says where the site is."),
+    ("label",
+     "What kind of site it is, from the adenines in the 20 nt of reference "
+     "downstream of the site: templated (8 or more, internal priming), "
+     "non-templated (4 or fewer, priming on the poly(A) tail) or ambiguous "
+     "(5 to 7). A read whose site fell back to the alignment end gets no "
+     "label."),
 ]

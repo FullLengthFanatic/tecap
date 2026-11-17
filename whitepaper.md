@@ -8,7 +8,7 @@ Version 0.4.0. MIT licensed. [github.com/FullLengthFanatic/tecap](https://github
 
 ## Abstract
 
-`tecap` reads a long-read RNA-seq alignment file and asks a single question of every transcript: where did its 3' end actually come from? Each multi-exon read is sorted into one of nine mechanism buckets based on where its 3' end lands relative to the gene's terminal exon, its 3' UTR, and a reference atlas of real polyadenylation sites. It then measures the base composition of the genome in a short window just downstream of each cleavage point, which separates priming on classical A-tracts (>=60% A) from priming on moderate-A sequence (30-50% A). On real data the moderate-A regime is where single-cell library preps live and the classical-A regime is where bulk Iso-Seq lives, a clean split whose biochemical cause is not yet known. tecap is a diagnostic, not a filter: it tells you *why* a protocol's reads end where they do, not whether they pass.
+`tecap` reads a long-read RNA-seq alignment file and asks a single question of every transcript: where did its 3' end actually come from? Each multi-exon read is sorted into one of nine mechanism buckets based on where its 3' end lands relative to the gene's terminal exon, its 3' UTR, and a reference atlas of real polyadenylation sites. It then counts the adenines in the 20 nt of genome just downstream of each read's site and labels the site templated (8 or more), non-templated (4 or fewer) or ambiguous (5 to 7): the bucket says where the site is, the label says what kind of site it is. It also reports two descriptive bands of the adenine share, 30% to 50% A and 60% A or more. On real data single-cell library preps are enriched in the 30% to 50% band and bulk Iso-Seq in the 60% or more band, a clean split whose biochemical cause is not yet known. tecap is a diagnostic, not a filter: it tells you *why* a protocol's reads end where they do, not whether they pass.
 
 ---
 
@@ -28,15 +28,15 @@ The **terminal exon (TE)** is the last exon of a transcript. It carries the **3'
 
 ## 2. What tecap does
 
-The core idea is one sentence: **in an oligo-dT prep, a read's 3' end is its priming site.** So the position of every read's 3' end, relative to the gene model, is direct evidence about how that read was primed.
+The core idea is one sentence: **in an oligo-dT prep, a read's priming site is where its terminal adenine run starts.** tecap calls that point the site: aligned and clipped adenines are counted together (10 or more, one other base allowed), because the aligner can align adenines encoded in the genome and carry the alignment end past them. A read without such a run, and every read under `--site-anchor alignment_end`, uses the alignment end instead. Below, a read's 3' end means its site. Its position relative to the gene model is direct evidence about where the read was primed.
 
 tecap turns that into two measurements.
 
 **Classification (the `classify` step).** Every multi-exon read is assigned to exactly one of nine buckets by where its 3' end falls relative to the TE, the TE's CDS/UTR split, and the nearest annotated PolyASite cluster. The buckets range from clean success (the read covers most of the TE) through real-but-truncated, real alternative polyadenylation, and the various flavors of internal priming.
 
-**Base composition (the `basecomp` step).** For every read, tecap fetches the 20 nucleotides of *reference genome* immediately 3' of the cleavage site (in mRNA orientation) and records the fraction that is A. Group those by bucket and you get a fingerprint of the sequence oligo-dT was annealing to. A real polyA cleavage site is not A-rich downstream; an internal-priming site usually is.
+**Base composition (the `basecomp` step).** For every spliced read in the eight basecomp buckets (MechA-internalUTR, MechA-noCDS and MechC are left out), tecap fetches the 20 nucleotides of *reference genome* immediately 3' of the site (in mRNA orientation) and counts the adenines. With 8 or more the site is templated (internal priming), with 4 or fewer non-templated (priming on the poly(A) tail), with 5 to 7 ambiguous; a read whose site fell back to the alignment end gets no label. Group those by bucket and you get a fingerprint of the sequence oligo-dT was annealing to. A real polyA cleavage site is not A-rich downstream; an internal-priming site usually is.
 
-The framing matters and is deliberate. tecap does not label reads "good" or "failed". A misprimed read is not a failed read; it is a read that was redirected to a fake polyA site, and which fake site tells you about the chemistry. The output is a mechanism breakdown, read as a diagnostic.
+The framing matters and is deliberate. tecap does not call reads "good" or "failed"; its labels say what kind of site a read has, not whether the read passes. A read with a templated site is not a failed read; it is a read that was redirected to a fake polyA site, and which fake site tells you about the chemistry. The output is a mechanism breakdown, read as a diagnostic.
 
 ### The gene model and where reads land
 
@@ -61,7 +61,7 @@ For a plus-strand gene, the picture is a left-to-right track from 5' to 3'. The 
      downstream, past the TE end ..................................... MechC
 ```
 
-Minus-strand genes are the mirror image; tecap handles strand throughout, so the 3' end is the alignment's left end on the minus strand and its right end on the plus strand.
+Minus-strand genes are the mirror image. tecap takes the strand from the gene, not from the read, so it looks for the 3' end at the read's left end on a minus-strand gene and at its right end on a plus-strand gene.
 
 ### The decision tree
 
@@ -84,15 +84,15 @@ The text below is the tool's own definition for each bucket (`tecap explain`).
 
 | Bucket | What it means | Why it matters |
 |---|---|---|
-| **Captured** | 3' end in the TE; read covers >=50% of it. | Successful full-length capture of the mRNA 3' end; the goal of any 3'-end protocol. |
-| **MechA-correct** | 3' end in the TE 3' UTR within +-25 bp of an annotated polyA cluster, but read covers <50% of TE. | Truncated transcript that nonetheless terminates at a real polyA site; common with degraded input or short-fragment library prep. |
-| **MechA-internalUTR** | 3' end in the TE 3' UTR but not at any annotated polyA cluster. | Internal oligo-dT priming on an A-rich stretch in the UTR; classic mispriming signature. |
-| **IP-TE-CDS** | 3' end inside the terminal exon's CDS portion. | Internal priming on the coding portion of the TE; strong mispriming signal. |
-| **MechA-noCDS** | 3' end inside the TE of a non-coding gene. | Reported separately so the coding-gene buckets stay clean. |
-| **MechB-APA** | 3' end upstream of the TE at an annotated polyA cluster on an upstream exon. | Alternative polyadenylation isoform; biological, not a mispriming artifact. |
-| **MechB-exon** | 3' end on an upstream exon, no nearby polyA cluster. | Internal priming on an upstream exon. |
-| **MechB-aspecific** | 3' end upstream of the TE in an intron or gene flank. | Pre-mRNA priming or off-target alignment. |
-| **MechC** | 3' end downstream of the TE end. | Read-through, unannotated 3' UTR extension, or alignment artifact. |
+| **Captured** | Read 3' end lands in the terminal exon and the read covers >=50% of it. | Successful full-length capture of the mRNA 3' end; the goal of any 3'-end protocol. |
+| **MechA-correct** | Read 3' end is in the TE 3' UTR within +-25 bp of an annotated PolyASite cluster, but the read covers <50% of the TE. | Truncated transcript that nonetheless terminates at a real polyA site; common with degraded input or short-fragment library prep. |
+| **MechA-internalUTR** | Read 3' end is in the TE 3' UTR but not within +-25 bp of any annotated polyA cluster. | Candidate internal priming site in the UTR; no annotated polyA cluster supports it. |
+| **IP-TE-CDS** | Read 3' end is inside the terminal exon's CDS portion (i.e. before the UTR begins). | Candidate internal priming site; real polyA sites are rare in coding sequence. |
+| **MechA-noCDS** | Read 3' end is inside the TE of a non-coding gene (no CDS to delimit a UTR). | Coding/UTR split does not apply; reported separately so the coding-gene buckets stay clean. |
+| **MechB-APA** | Read 3' end is upstream of the terminal exon but at an annotated polyA cluster on an upstream exon. | Alternative polyadenylation isoform, supported by an annotated polyA cluster. |
+| **MechB-exon** | Read 3' end is on an upstream exon, with no annotated polyA cluster nearby. | Candidate internal priming site on an upstream exon; no annotated polyA cluster supports it. |
+| **MechB-aspecific** | Read 3' end is upstream of the TE in an intron or gene flank. | Pre-mRNA priming or off-target alignment. |
+| **MechC** | Read 3' end is downstream of the terminal exon end. | Read-through, unannotated 3' UTR extension, or alignment artifact past the annotated TE. |
 
 For the polyA-site buckets (MechA-correct, MechB-APA), tecap further splits reads by whether the supporting atlas cluster carries a canonical AAUAAA-like hexamer: **PAS+** (it does, high confidence) versus **PAS-** (it does not). A read at a PAS- cluster is weaker evidence for real cleavage and a candidate mispriming artifact.
 
@@ -115,7 +115,7 @@ Direct-RNA sequencing is refused at the command line on purpose. There is no rev
 
 - **Terminal exon coverage**: overlap of the read with the TE divided by TE length. The default **0.5** threshold is what separates Captured from the truncated buckets.
 - **PolyA matching**: a 3' end counts as "at a polyA site" if it falls within **+-25 bp** of an atlas cluster on the same strand.
-- **Downstream base composition**: the fraction of A in the **20 nt** reference window 3' of the cleavage site. Two regimes are reported per bucket: the **moderate-A** band (30-50% A) and the **classical A-tract** line (>=60% A).
+- **Downstream base composition**: the adenines in the **20 nt** reference window 3' of the site, counted as an integer. Per bucket tecap reports how many reads with an observed site are templated (8 or more), non-templated (4 or fewer) or ambiguous (5 to 7), and the adenine share as a histogram and three bands. `frac_ge_60`, `frac_30_50` and `frac_ge_40` are descriptive bands of the adenine share in the window (60% or more, 30% to under 50%, 40% or more). They do not name a priming mechanism. The label is in `frac_templated`, `frac_nontemplated` and `frac_ambiguous`.
 - **UTR-length stratification**: capture and MechA-correct rates are broken out by 3' UTR length bins (0-500, 500-1k, 1k-2k, 2k-5k, >5k bp), because mispriming bias concentrates in long-UTR genes.
 - **Orientation sanity check**: the fraction of reads whose alignment strand matches the gene strand (`orient_match_frac`), a check that the input is properly stranded.
 
@@ -147,7 +147,7 @@ Three things came out of the per-read accounting that "10x is worse" would never
 
 - **The PAS+/PAS- split exposes a systematic bias.** Among MechB-APA reads, only 33.4% of 10x reads sit at a hexamer-carrying cluster versus 47.3% for BD. 10x lands disproportionately on PAS- clusters, the ones most likely to be atlas-level internal-priming artifacts.
 - **Read length explains about half the gap.** Median aligned length is shorter for 10x (Captured 1036 bp vs 1404 bp). Stratified by UTR length, the capture gap widens monotonically toward long UTRs, exactly what a length-limited read would do. But the gap at short UTRs is too small for length to be the whole story.
-- **Classic A-rich internal priming is not the dominant mechanism.** The fraction of reads with >=60% A downstream is below 8.5% in every bucket of both samples. What separates the two is the moderate-A band: 10x is shifted warmer in 30-50% A across nearly every internal-priming bucket, most strongly in MechB-aspecific (+10.5 percentage points, 35.8% vs 25.3%).
+- **Windows of 60% A or more are rare.** The fraction of reads with 60% A or more downstream is below 8.5% in every bucket of both samples. What separates the two is the 30% to 50% A band: 10x is shifted warmer there across nearly every bucket, most strongly in MechB-aspecific (+10.5 percentage points, 35.8% vs 25.3%).
 
 ### Single-cell vs bulk, across six datasets
 
@@ -164,8 +164,8 @@ Extending the panel to six human datasets on the same backend turns that shift i
 
 Two families fall out, robust across capture architectures:
 
-1. **Single-cell preps** (10x droplet, BD microwell, ArgenTag nanowell, plate FLASH-seq): moderate-A priming dominates (`frac[30,50]` 0.25 to 0.36), classical A-tract priming is rare (`frac>=60` at most 0.07).
-2. **Bulk Iso-Seq**: classical A-tract priming dominates (`frac>=60` around 0.47), moderate-A priming sits near the genomic baseline.
+1. **Single-cell preps** (10x droplet, BD microwell, ArgenTag nanowell, plate FLASH-seq): the 30% to 50% A band dominates (`frac[30,50]` 0.25 to 0.36), windows of 60% A or more are rare (`frac>=60` at most 0.07).
+2. **Bulk Iso-Seq**: the 60% A or more band dominates (`frac>=60` around 0.47), the 30% to 50% A band sits near the genomic baseline.
 
 The separation is roughly 7x on `frac>=60` and 2x on `frac[30,50]`, and it holds across droplet, microwell, nanowell, and plate capture, and across both bead-immobilized and in-solution reverse transcription.
 
@@ -178,7 +178,7 @@ What separates the two families biochemically is not established. Several plausi
 - **PCR primer asymmetry.** Falsified: FS-ONT and 10x both use two different amplification primers.
 - **RT polymerase identity.** Implausible at this magnitude.
 
-Lysis chemistry, PCR cycle count, and read orientation were matched and are not the axis. Until the underlying biochemistry is identified, the moderate-A vs classical-A split is reported as an empirical signature that distinguishes single-cell preps from bulk Iso-Seq, with no claim about cause. The tool's value is that it surfaces and quantifies this axis cleanly; the biology is a separate, open question.
+Lysis chemistry, PCR cycle count, and read orientation were matched and are not the axis. Until the underlying biochemistry is identified, the split between the 30% to 50% A band and the 60% A or more band is reported as an empirical signature that distinguishes single-cell preps from bulk Iso-Seq, with no claim about cause. The tool's value is that it surfaces and quantifies this axis cleanly; the biology is a separate, open question.
 
 ---
 
@@ -190,7 +190,7 @@ Lysis chemistry, PCR cycle count, and read orientation were matched and are not 
 - **Base composition is read off the reference, not the read.** That makes the A-content measurement independent of basecalling error near the cleavage site, which matters for ONT data.
 - **The reporting is built for people who did not run the tool.** Self-contained HTML, an intro paragraph, a reading guide, and a glossary mean a reviewer or collaborator can open one file and understand it. Definitions live in one place (`constants.py`) and feed the README, the reports, the plot captions, and `tecap explain` identically.
 - **It is light to deploy and run.** Pure Python, no external CLI tools, contig-level parallelism with copy-on-write references, and a low memory footprint.
-- **It is scientifically honest in its own record.** An earlier version attributed the moderate-A split to a specific oligo-dT mechanism; when bench data falsified that, the claim was retracted in the changelog and the published release notes were left intact rather than quietly rewritten.
+- **It is scientifically honest in its own record.** An earlier version attributed the 30% to 50% A split to a specific oligo-dT mechanism; when bench data falsified that, the claim was retracted in the changelog and the published release notes were left intact rather than quietly rewritten.
 
 ---
 
@@ -199,15 +199,15 @@ Lysis chemistry, PCR cycle count, and read orientation were matched and are not 
 These are limitations of the method and its scope, separate from the engineering roadmap.
 
 - **The headline finding has no mechanism.** The single-cell vs bulk split is empirical. tecap measures it; it does not explain it, and it should not be cited as if it did.
-- **Base composition is reference-based.** It reads genomic A-content, not the actual nucleotides the oligo-dT annealed to in a given molecule. Polymorphic A-tracts or errors near the cleavage point can shift the real target. Over millions of reads this averages out; for individual loci it does not.
-- **The 20 nt window is short.** A 30 or 40 nt window might resolve the moderate-A signature more cleanly. The window size is configurable; the 30/50/60% A thresholds that define the regimes are not, currently.
+- **Base composition is reference-based.** It reads genomic A-content, not the actual nucleotides the oligo-dT annealed to in a given molecule. Polymorphic adenine runs or errors near the cleavage point can shift the real target. Over millions of reads this averages out; for individual loci it does not.
+- **The 20 nt window is short.** A 30 or 40 nt window might resolve the 30% to 50% A signature more cleanly. The window size is configurable; the 30/50/60% A band edges are not, currently, and the labels are defined for the 20 nt window only (with any other `--window` the label fields are null).
 - **The 50% coverage threshold is arbitrary.** It sets the Captured vs MechA-correct boundary. Bucket *ordering* across samples is stable to the choice, but absolute percentages move with it.
 - **The polyA atlas is imperfect.** PolyASite inherits internal-priming artifacts from its source data. The PAS+/PAS- split mitigates this but does not eliminate it: a genuine non-canonical polyA event can be PAS-.
-- **Stranded input is assumed, and not enforced.** tecap uses the alignment strand to define "downstream". An unstranded BAM dilutes the signal toward the genomic mean. The `PBMC_FS_ONT` sample (orientation match 0.495, meaning random strand because pychopper was not run upstream) is a worked example: its basecomp numbers are conservative bounds, not point estimates. tecap reports the orientation match fraction, and in the development version after 0.4.0 both `classify` and `basecomp` warn when it drops below 0.80, the signature of unstranded input. The guard surfaces the problem; it does not fix it. tecap still writes the diluted metrics rather than correcting or refusing the run, so orienting reads with pychopper / cdna_classifier upstream remains the real fix.
+- **Stranded input is assumed, and not enforced.** tecap uses the gene strand to define "downstream" and to look for the read's terminal adenine run. An unstranded BAM dilutes the signal toward the genomic mean. The `PBMC_FS_ONT` sample (orientation match 0.495, meaning random strand because pychopper was not run upstream) is a worked example: its basecomp numbers are conservative bounds, not point estimates. tecap reports the orientation match fraction, and in the development version after 0.4.0 both `classify` and `basecomp` warn when it drops below 0.80, the signature of unstranded input. The guard surfaces the problem; it does not fix it. tecap still writes the diluted metrics rather than correcting or refusing the run, so orienting reads with pychopper / cdna_classifier upstream remains the real fix.
 - **It depends on annotation.** Genes or 3' ends absent from the GTF, or transcripts with unannotated 3' UTR extensions, are mis-bucketed (often into MechC). Novel-isoform discovery is out of scope.
 - **Only multi-exon reads are analyzed.** Single-exon transcripts and intronless genes are not classified.
 - **Direct-RNA is unsupported by design.** No RT, no oligo-dT, nothing to diagnose.
-- **One coverage gap is open.** As of the v0.4 work there was no clean public human plate-based Smart-seq + PacBio HiFi dataset to test whether the moderate-A signature tracks reaction-volume scale or chemistry lineage. That experiment is still missing.
+- **One coverage gap is open.** As of the v0.4 work there was no clean public human plate-based Smart-seq + PacBio HiFi dataset to test whether the 30% to 50% A signature tracks reaction-volume scale or chemistry lineage. That experiment is still missing.
 
 ---
 

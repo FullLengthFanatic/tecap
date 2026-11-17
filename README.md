@@ -5,7 +5,7 @@
 
 3' terminal exon capture diagnostics for long-read single-cell RNA-seq.
 
-`tecap` classifies long-read alignments by where their 3' end lands relative to the terminal exon (TE), its UTR, and a polyA site atlas. It decomposes capture failures into nine mechanism buckets (successful capture, truncation at a real polyA site, internal priming in the UTR, internal priming in the CDS, alternative polyadenylation, upstream-exon mispriming, intronic mispriming, downstream readthrough) and measures reference base composition downstream of each cleavage site, separating classical A-tract internal priming (>=60% A) from moderate-A priming (30-50% A). Empirically the two regimes split single-cell preps from bulk Iso-Seq; the biochemical driver of the split is currently uncharacterized.
+`tecap` classifies long-read alignments by where their 3' end lands relative to the terminal exon (TE), its UTR, and a polyA site atlas. It decomposes capture failures into nine mechanism buckets (successful capture, truncation at a real polyA site, a UTR site away from any polyA site, a CDS site, alternative polyadenylation, an upstream-exon site, an intronic or flanking site, downstream readthrough) and measures reference base composition downstream of each read's site: it labels the site templated, non-templated or ambiguous from the adenines in the 20 nt downstream, and reports two descriptive bands of the adenine share (30% to 50% A, 60% A or more). The bucket says where the site is, the label says what kind of site it is. Empirically the two bands split single-cell preps from bulk Iso-Seq; the biochemical driver of the split is currently uncharacterized.
 
 Designed for PacBio Iso-Seq / Kinnex and Oxford Nanopore cDNA BAMs. Direct-RNA sequencing is explicitly unsupported (no RT, no priming artifact to diagnose).
 
@@ -17,15 +17,15 @@ the nearest annotated PolyASite cluster.
 
 | Bucket | What it means | Why it matters |
 |---|---|---|
-| **Captured** | 3' end in the TE; read covers >=50% of it. | Successful full-length capture of the mRNA 3' end; the goal of any 3'-end protocol. |
-| **MechA-correct** | 3' end in the TE 3' UTR within +-25 bp of an annotated polyA cluster, but read covers <50% of TE. | Truncated transcript that nonetheless terminates at a real polyA site; common with degraded input or short-fragment library prep. |
-| **MechA-internalUTR** | 3' end in the TE 3' UTR but not at any annotated polyA cluster. | Internal oligo-dT priming on an A-rich stretch in the UTR; classic mispriming signature. |
-| **IP-TE-CDS** | 3' end inside the terminal exon's CDS portion. | Internal priming on the coding portion of the TE; strong mispriming signal. |
-| **MechA-noCDS** | 3' end inside the TE of a non-coding gene. | Reported separately so the coding-gene buckets stay clean. |
-| **MechB-APA** | 3' end upstream of the TE at an annotated polyA cluster on an upstream exon. | Alternative polyadenylation isoform; biological, not a mispriming artifact. |
-| **MechB-exon** | 3' end on an upstream exon, no nearby polyA cluster. | Internal priming on an upstream exon. |
-| **MechB-aspecific** | 3' end upstream of the TE in an intron or gene flank. | Pre-mRNA priming or off-target alignment. |
-| **MechC** | 3' end downstream of the TE end. | Read-through, unannotated 3' UTR extension, or alignment artifact. |
+| **Captured** | Read 3' end lands in the terminal exon and the read covers >=50% of it. | Successful full-length capture of the mRNA 3' end; the goal of any 3'-end protocol. |
+| **MechA-correct** | Read 3' end is in the TE 3' UTR within +-25 bp of an annotated PolyASite cluster, but the read covers <50% of the TE. | Truncated transcript that nonetheless terminates at a real polyA site; common with degraded input or short-fragment library prep. |
+| **MechA-internalUTR** | Read 3' end is in the TE 3' UTR but not within +-25 bp of any annotated polyA cluster. | Candidate internal priming site in the UTR; no annotated polyA cluster supports it. |
+| **IP-TE-CDS** | Read 3' end is inside the terminal exon's CDS portion (i.e. before the UTR begins). | Candidate internal priming site; real polyA sites are rare in coding sequence. |
+| **MechA-noCDS** | Read 3' end is inside the TE of a non-coding gene (no CDS to delimit a UTR). | Coding/UTR split does not apply; reported separately so the coding-gene buckets stay clean. |
+| **MechB-APA** | Read 3' end is upstream of the terminal exon but at an annotated polyA cluster on an upstream exon. | Alternative polyadenylation isoform, supported by an annotated polyA cluster. |
+| **MechB-exon** | Read 3' end is on an upstream exon, with no annotated polyA cluster nearby. | Candidate internal priming site on an upstream exon; no annotated polyA cluster supports it. |
+| **MechB-aspecific** | Read 3' end is upstream of the TE in an intron or gene flank. | Pre-mRNA priming or off-target alignment. |
+| **MechC** | Read 3' end is downstream of the terminal exon end. | Read-through, unannotated 3' UTR extension, or alignment artifact past the annotated TE. |
 
 The basecomp subcommand also splits Captured / MechA / MechB-APA reads by
 whether their cluster carries a canonical AAUAAA-like hexamer (PAS+/-).
@@ -37,13 +37,15 @@ Run `tecap explain` to print these definitions on the terminal, or
 
 - `{sample}_terminal_exon.png` — three panels: bucket fractions, read-length
   density (Captured vs MechA-correct), and rates by 3' UTR length bin.
-  Mispriming bias concentrates in the long-UTR bins.
+  Capture failures concentrate in the long-UTR bins.
 - `{sample}_mecha_scatter.png` — read length vs TE coverage for
   MechA-correct reads only; reads above the dashed coverage threshold get
   promoted to Captured.
 - `{sample}_basecomp.png` — eight panels, one per bucket, showing %A in
-  the reference window downstream of cleavage. **Grey band (30-50% A):**
-  moderate-A priming. **Dashed line (>=60% A):** classical A-tract priming.
+  the reference window downstream of each read's site. **Grey band:** 30%
+  to 50% A. **Dashed line:** 60% A. Both are descriptive bands, not
+  priming mechanisms: the bucket says where the site is, the label
+  (templated, non-templated, ambiguous) says what kind of site it is.
   Empirically, single-cell prep datasets (10x, in-house FLASH-seq
   variants on the BD Rhapsody platform and on plates, ArgenTag)
   cluster in the grey band; bulk Iso-Seq datasets
@@ -142,6 +144,8 @@ Per sample (basecomp):
 - `{sample}_basecomp.json` — %A histograms per bucket, medians, >=60% and 30-50% fractions.
 - `{sample}_basecomp.png` — 8-panel histogram grid.
 
+`frac_ge_60`, `frac_30_50` and `frac_ge_40` are descriptive bands of the adenine share in the window (60% or more, 30% to under 50%, 40% or more). They do not name a priming mechanism. The label is in `frac_templated`, `frac_nontemplated` and `frac_ambiguous`.
+
 Cross-sample:
 - `comparison_terminal_exon.png` — grouped bars across samples.
 - `comparison_basecomp.png` — per-bucket histogram overlays.
@@ -179,7 +183,7 @@ platform with Kinnex concatenation (not stock Rhapsody chemistry).
 
 ![Terminal-exon bucket fractions and UTR-bin MechA-correct rates: 10x vs in-house FLASH-seq variant on Rhapsody platform.](docs/example_plots/10x_vs_BD46_terminal_exon.png)
 
-![%A in the 20 nt reference window downstream of cleavage, per bucket: 10x vs in-house FLASH-seq variant on Rhapsody platform. Grey band: 30-50% A (moderate-A priming). Dashed line: 60% A (classical A-tract priming). 10x is shifted warmer in the 30-50% A range across most internal-priming buckets; both samples cluster in the grey band, far from the dashed-line regime occupied by bulk Iso-Seq.](docs/example_plots/10x_vs_BD46_basecomp.png)
+![%A in the 20 nt reference window downstream of cleavage, per bucket: 10x vs in-house FLASH-seq variant on Rhapsody platform. Grey band: 30% to 50% A. Dashed line: 60% A. 10x is shifted warmer in the 30% to 50% A range across most buckets; both samples cluster in the grey band, far from the region past the dashed line occupied by bulk Iso-Seq.](docs/example_plots/10x_vs_BD46_basecomp.png)
 
 **Single-cell vs bulk Iso-Seq:** 10x Kinnex vs PacBio Kinnex bulk
 cerebellum.
