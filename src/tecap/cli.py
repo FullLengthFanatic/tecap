@@ -12,8 +12,12 @@ from tecap.constants import (
     CATEGORIES,
     MECH_A_CORRECT,
     MECH_B_APA,
+    ORIENT_MIN_FRAC,
     SITE_ANCHOR_DEFAULT,
     SITE_ANCHORS,
+    STRANDEDNESS,
+    STRANDEDNESS_DEFAULT,
+    STRANDEDNESS_PROBE_READS,
     UTR_BIN_LABELS,
 )
 
@@ -64,6 +68,13 @@ def _add_common_indexing_args(p):
                         "a_run_start (where the read's terminal A run starts; the "
                         "alignment end when the read has no run). "
                         f"Default {SITE_ANCHOR_DEFAULT}.")
+    p.add_argument("--strandedness", choices=STRANDEDNESS, default=STRANDEDNESS_DEFAULT,
+                   help="Library strandedness. On stranded input, reads antisense "
+                        "to their gene are skipped and counted in "
+                        "antisense_skipped. auto calls the input stranded when "
+                        f"the first {STRANDEDNESS_PROBE_READS:,} reads with a gene "
+                        f"match the gene strand in {ORIENT_MIN_FRAC:.2f} of cases "
+                        f"or more. Default {STRANDEDNESS_DEFAULT}.")
     p.add_argument("--threads", type=int, default=1,
                    help="Number of worker processes (contig-level parallelism).")
     p.add_argument("--verbose", action="store_true")
@@ -154,6 +165,21 @@ def _resolve_references(args):
             genome=args.genome, version=args.gtf_version, out_dir=cache_dir,
         )
         args.gtf = path
+
+
+def _resolve_strandedness(args, gene_index, gene_records, log):
+    """The "strandedness" record of the JSON outputs: auto is resolved by
+    probing the BAM (tecap.bam.probe_strandedness)."""
+    from tecap.bam import probe_strandedness
+
+    if args.strandedness != "auto":
+        return {"requested": args.strandedness, "resolved": args.strandedness,
+                "probe": None}
+    probe = probe_strandedness(args.bam, gene_index, gene_records, args.min_mapq)
+    resolved = "stranded" if probe["stranded"] else "unstranded"
+    log.info("Strandedness auto: %s (BAM/gene-strand match fraction %s over %d reads)",
+             resolved, probe["match_frac"], probe["reads"])
+    return {"requested": "auto", "resolved": resolved, "probe": probe}
 
 
 def _build_parser():
@@ -269,6 +295,7 @@ def _cmd_classify(args):
     polya_index = build_polya_index(args.polya_sites,
                                     slop=args.polya_slop,
                                     allowed_types=allowed_types)
+    strandedness = _resolve_strandedness(args, gene_index, gene_records, log)
 
     results = analyse_bam(
         bam_path      = args.bam,
@@ -280,6 +307,7 @@ def _cmd_classify(args):
         threads       = args.threads,
         cb_tag        = args.cell_barcode_tag,
         site_anchor   = args.site_anchor,
+        skip_antisense = strandedness["resolved"] == "stranded",
     )
     results["sample"] = args.sample
 
@@ -302,6 +330,8 @@ def _cmd_classify(args):
                                  for k, v in pas.items()},
         "orient_match_frac":    (orient["match"] / orient_total
                                  if orient_total else None),
+        "strandedness":         strandedness,
+        "antisense_skipped":    results["antisense_skipped"],
         "utr_bin_labels":       UTR_BIN_LABELS,
         "utr_bin_total":        results["utr_bin_total"],
         "utr_bin_mecha_correct": results["utr_bin_mecha_correct"],
@@ -388,6 +418,7 @@ def _cmd_basecomp(args):
     polya_index = build_polya_index(args.polya_sites,
                                     slop=args.polya_slop,
                                     allowed_types=allowed_types)
+    strandedness = _resolve_strandedness(args, gene_index, gene_records, log)
 
     a_count_by_bucket, _, orient, site_stats = analyse(
         bam_path      = args.bam,
@@ -400,12 +431,14 @@ def _cmd_basecomp(args):
         window        = args.window,
         threads       = args.threads,
         site_anchor   = args.site_anchor,
+        skip_antisense = strandedness["resolved"] == "stranded",
     )
 
     orient_total = orient["match"] + orient["mismatch"]
     orient_match_frac = orient["match"] / orient_total if orient_total else None
 
     labels = site_stats.pop("labels")
+    antisense_skipped = site_stats.pop("antisense_skipped")
     summary = summarise(a_count_by_bucket, window=args.window, labels=labels)
     summary["sample"]            = args.sample
     summary["platform"]          = args.platform
@@ -415,6 +448,8 @@ def _cmd_basecomp(args):
     summary["site_anchor"]       = args.site_anchor
     summary["site_counts"]       = site_stats
     summary["orient_match_frac"] = orient_match_frac
+    summary["strandedness"]      = strandedness
+    summary["antisense_skipped"] = antisense_skipped
 
     warn_if_unstranded(orient_match_frac, log)
 

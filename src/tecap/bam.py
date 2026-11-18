@@ -20,6 +20,7 @@ from tecap.constants import (
     MECH_B_APA,
     ORIENT_MIN_FRAC,
     SITE_ANCHOR_DEFAULT,
+    STRANDEDNESS_PROBE_READS,
     UTR_BIN_LABELS,
 )
 from tecap.polya import utr_bin
@@ -46,6 +47,69 @@ def warn_if_unstranded(orient_match_frac, log):
         )
 
 
+def gene_of_read(read, genes, gene_records, min_mapq):
+    """Gene id a read is classified against, or None when the read is
+    dropped: not primary, unmapped, no CIGAR, MAPQ below min_mapq, no N in
+    the CIGAR, or no overlapping gene with strand + or -. Otherwise the gene
+    of `genes` (the gene index of the read's contig) whose span overlaps the
+    read's reference span the most."""
+    if (read.is_unmapped or read.is_secondary or
+            read.is_supplementary or not read.cigartuples):
+        return None
+    if read.mapping_quality < min_mapq:
+        return None
+    if not any(op == 3 for op, _ in read.cigartuples):
+        return None
+
+    best_gid, best_ovlp = None, 0
+    for iv in genes[read.reference_start:read.reference_end]:
+        gid = iv.data
+        rec = gene_records[gid]
+        if rec["strand"] not in ("+", "-"):
+            continue
+        ovlp = (min(read.reference_end, iv.end) -
+                max(read.reference_start, iv.begin))
+        if ovlp > best_ovlp:
+            best_ovlp, best_gid = ovlp, gid
+    return best_gid
+
+
+def probe_strandedness(bam_path, gene_index, gene_records, min_mapq,
+                       n=STRANDEDNESS_PROBE_READS):
+    """BAM/gene-strand match fraction of the first n reads the workers would
+    classify, contigs in BAM order. Returns {"reads", "match_frac",
+    "stranded"}: stranded when match_frac is ORIENT_MIN_FRAC or more; a BAM
+    without such a read counts as unstranded (match_frac None)."""
+    reads = match = 0
+    bam = pysam.AlignmentFile(bam_path, "rb")
+    try:
+        for chrom in _populated_contigs(bam_path):
+            if reads >= n:
+                break
+            genes = gene_index[chrom]
+            try:
+                iterator = bam.fetch(contig=chrom)
+            except ValueError:
+                continue
+            for read in iterator:
+                gid = gene_of_read(read, genes, gene_records, min_mapq)
+                if gid is None:
+                    continue
+                reads += 1
+                if read.is_reverse == (gene_records[gid]["strand"] == "-"):
+                    match += 1
+                if reads >= n:
+                    break
+    finally:
+        bam.close()
+    match_frac = match / reads if reads else None
+    return {
+        "reads":      reads,
+        "match_frac": match_frac,
+        "stranded":   match_frac is not None and match_frac >= ORIENT_MIN_FRAC,
+    }
+
+
 _WORKER = {
     "bam_path":      None,
     "gene_index":    None,
@@ -55,6 +119,7 @@ _WORKER = {
     "min_mapq":      None,
     "cb_tag":        None,
     "site_anchor":   None,
+    "skip_antisense": None,
 }
 
 
@@ -66,6 +131,7 @@ def _empty_accumulator():
         "pas_counts":           {MECH_A_CORRECT: {"pas": 0, "nopas": 0},
                                   MECH_B_APA:     {"pas": 0, "nopas": 0}},
         "orient":               {"match": 0, "mismatch": 0},
+        "antisense_skipped":    0,
         "site":                 {"observed": 0, "fallback": 0},
         "mecha_read_lengths":    [],
         "capt_read_lengths":     [],
@@ -100,6 +166,7 @@ def _merge_accumulator(dst, src):
         dst["pas_counts"][cat]["nopas"] += src["pas_counts"][cat]["nopas"]
     dst["orient"]["match"]    += src["orient"]["match"]
     dst["orient"]["mismatch"] += src["orient"]["mismatch"]
+    dst["antisense_skipped"]  += src["antisense_skipped"]
     dst["site"]["observed"]   += src["site"]["observed"]
     dst["site"]["fallback"]   += src["site"]["fallback"]
     dst["mecha_read_lengths"].extend(src["mecha_read_lengths"])
@@ -133,6 +200,7 @@ def _process_chrom(chrom):
     min_mapq      = _WORKER["min_mapq"]
     cb_tag        = _WORKER["cb_tag"]
     site_anchor   = _WORKER["site_anchor"]
+    skip_antisense = _WORKER["skip_antisense"]
 
     acc = _empty_accumulator()
     try:
@@ -147,34 +215,22 @@ def _process_chrom(chrom):
         bam.close()
         return acc
 
+    genes = gene_index[chrom]
     for read in iterator:
-        if (read.is_unmapped or read.is_secondary or
-                read.is_supplementary or not read.cigartuples):
-            continue
-        if read.mapping_quality < min_mapq:
-            continue
-        if not any(op == 3 for op, _ in read.cigartuples):
-            continue
-
-        hits = gene_index[chrom][read.reference_start:read.reference_end]
-        if not hits:
-            continue
-
-        best_gid, best_ovlp = None, 0
-        for iv in hits:
-            gid = iv.data
-            rec = gene_records[gid]
-            if rec["strand"] not in ("+", "-"):
-                continue
-            ovlp = (min(read.reference_end, iv.end) -
-                    max(read.reference_start, iv.begin))
-            if ovlp > best_ovlp:
-                best_ovlp, best_gid = ovlp, gid
-
+        best_gid = gene_of_read(read, genes, gene_records, min_mapq)
         if best_gid is None:
             continue
 
         rec = gene_records[best_gid]
+        expect_reverse = (rec["strand"] == "-")
+        if read.is_reverse == expect_reverse:
+            acc["orient"]["match"] += 1
+        else:
+            acc["orient"]["mismatch"] += 1
+            if skip_antisense:
+                acc["antisense_skipped"] += 1
+                continue
+
         site, observed = read_site(read, rec["strand"], site_anchor)
         acc["site"]["observed" if observed else "fallback"] += 1
         cat, cov, _, has_pas = classify_read(read, rec, polya_index, cov_threshold,
@@ -184,12 +240,6 @@ def _process_chrom(chrom):
 
         if cat in acc["pas_counts"]:
             acc["pas_counts"][cat]["pas" if has_pas else "nopas"] += 1
-
-        expect_reverse = (rec["strand"] == "-")
-        if read.is_reverse == expect_reverse:
-            acc["orient"]["match"] += 1
-        else:
-            acc["orient"]["mismatch"] += 1
 
         ub = utr_bin(rec["utr_length"])
         acc["utr_bin_total"][ub] += 1
@@ -235,7 +285,8 @@ def _populated_contigs(bam_path):
 
 def analyse_bam(bam_path, gene_index, gene_records, polya_index,
                 cov_threshold, min_mapq, threads=1, cb_tag=None,
-                cb_probe_reads=10_000, site_anchor=SITE_ANCHOR_DEFAULT):
+                cb_probe_reads=10_000, site_anchor=SITE_ANCHOR_DEFAULT,
+                skip_antisense=False):
     """Process a BAM in parallel by contig. Returns a results dict matching
     the v0.1 JSON schema.
 
@@ -247,6 +298,9 @@ def analyse_bam(bam_path, gene_index, gene_records, polya_index,
     site_anchor picks the read 3' end used for classification (see
     tecap.site.read_site); "site" counts the reads whose site was observed
     and those that fell back to the alignment end.
+
+    With skip_antisense, a read whose strand is opposite its gene's is
+    counted in "antisense_skipped" and in "orient", and nowhere else.
     """
 
     probed_cb_tag = cb_tag
@@ -265,6 +319,7 @@ def analyse_bam(bam_path, gene_index, gene_records, polya_index,
     _WORKER["min_mapq"]      = min_mapq
     _WORKER["cb_tag"]        = probed_cb_tag
     _WORKER["site_anchor"]   = site_anchor
+    _WORKER["skip_antisense"] = skip_antisense
 
     merged = _empty_accumulator()
 
@@ -310,6 +365,7 @@ def analyse_bam(bam_path, gene_index, gene_records, polya_index,
         "cov_fracs":             dict(merged["cov_fracs"]),
         "pas_counts":            merged["pas_counts"],
         "orient":                merged["orient"],
+        "antisense_skipped":     merged["antisense_skipped"],
         "site":                  merged["site"],
         "mecha_read_lengths":    merged["mecha_read_lengths"],
         "capt_read_lengths":     merged["capt_read_lengths"],

@@ -53,6 +53,15 @@ UTR_BIN_LABELS = ["0-500", "500-1k", "1k-2k", "2k-5k", ">5k"]
 ORIENT_MIN_FRAC = 0.80
 
 
+# --strandedness of classify and basecomp. On stranded input a read antisense
+# to its gene is skipped: its bucket and its site would describe the wrong
+# end. auto calls the input stranded when the first STRANDEDNESS_PROBE_READS
+# reads with a gene match the gene strand in ORIENT_MIN_FRAC of cases or more.
+STRANDEDNESS             = ("auto", "stranded", "unstranded")
+STRANDEDNESS_DEFAULT     = "auto"
+STRANDEDNESS_PROBE_READS = 200_000
+
+
 # Base composition buckets (basecomp subcommand)
 BUCKET_CAPT         = "Captured"
 BUCKET_MA_PAS       = "MechA_PAS+"

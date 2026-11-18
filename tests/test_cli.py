@@ -175,6 +175,65 @@ def test_site_anchor_and_counts_in_both_jsons(synthetic_fixture, tmp_path, ancho
             assert data["total"] == n_reads
 
 
+def _run_both(fx, tmp_path, extra_args=()):
+    """Run classify and basecomp on fx; yield (cmd, result, JSON or None)."""
+    common = ["--bam", fx["bam"], "--gtf", fx["gtf"], "--polya-sites", fx["polya"],
+              "--sample", "TST", "--out-dir", str(tmp_path), *extra_args]
+    for cmd, extra, json_name in (
+        ("classify", [], "TST_terminal_exon.json"),
+        ("basecomp", ["--fasta", fx["fasta"]], "TST_basecomp.json"),
+    ):
+        res = _run_cli([cmd, *common, *extra])
+        assert res.returncode == 0, f"{cmd} stderr: {res.stderr}"
+        yield cmd, res, json.loads((tmp_path / json_name).read_text())
+
+
+@pytest.mark.parametrize("flag, resolved, probe, skipped", [
+    ("stranded",   "stranded",   None, 1),
+    ("unstranded", "unstranded", None, 0),
+    # auto: 12 of 13 reads sense to their gene, 0.92 >= 0.80.
+    (None,         "stranded",   {"reads": 13, "match_frac": 12 / 13, "stranded": True}, 1),
+])
+def test_strandedness_and_antisense_skipped_in_both_jsons(antisense_fixture, tmp_path,
+                                                          flag, resolved, probe, skipped):
+    extra = ["--strandedness", flag] if flag else []
+    for cmd, _, data in _run_both(antisense_fixture, tmp_path, extra):
+        assert data["strandedness"] == {"requested": flag or "auto",
+                                        "resolved": resolved, "probe": probe}, cmd
+        assert data["antisense_skipped"] == skipped, cmd
+        assert data["orient_match_frac"] == 12 / 13, cmd
+        assert sum(data["site_counts"].values()) == 13 - skipped, cmd
+        if cmd == "classify":
+            # Kept, r_antisense_A is Captured, as any read before the skip.
+            assert data["counts"]["Captured (>=50%)"] == 4 - skipped
+            assert data["total"] == 13 - skipped
+        else:
+            assert data["buckets"]["Captured"]["n"] == 4 - skipped
+
+
+def test_auto_resolves_stranded_on_the_fixture(synthetic_fixture, tmp_path):
+    n_reads = len(synthetic_fixture["expected_buckets"])
+    for cmd, _, data in _run_both(synthetic_fixture, tmp_path):
+        assert data["strandedness"] == {
+            "requested": "auto", "resolved": "stranded",
+            "probe": {"reads": n_reads, "match_frac": 1.0, "stranded": True}}, cmd
+        assert data["antisense_skipped"] == 0, cmd
+
+
+def test_auto_resolves_unstranded_on_half_flipped_reads(half_flipped_fixture, tmp_path):
+    """Nothing is skipped and the stranding guard still warns."""
+    for cmd, res, data in _run_both(half_flipped_fixture, tmp_path):
+        assert data["strandedness"] == {
+            "requested": "auto", "resolved": "unstranded",
+            "probe": {"reads": 12, "match_frac": 0.5, "stranded": False}}, cmd
+        assert data["antisense_skipped"] == 0, cmd
+        assert data["orient_match_frac"] == 0.5, cmd
+        assert sum(data["site_counts"].values()) == 12, cmd
+        assert "WARNING" in res.stderr and "match fraction is 0.500" in res.stderr, cmd
+        if cmd == "classify":
+            assert data["total"] == 12
+
+
 @pytest.mark.parametrize("threads", ["1", "2"])
 def test_records_without_sequence_fall_back(synthetic_fixture, tmp_path, threads):
     """Primary spliced records stored without SEQ: both subcommands finish under

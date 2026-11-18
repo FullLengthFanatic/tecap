@@ -111,6 +111,39 @@ def test_window_of_internal_kept_follows_the_anchor(synthetic_fixture, monkeypat
     assert p + 10 - offset not in windows
 
 
+@pytest.mark.parametrize("skip, skipped", [(True, 1), (False, 0)])
+@pytest.mark.parametrize("threads", [1, 2])
+def test_antisense_read_is_skipped_on_stranded_input(antisense_fixture, monkeypatch,
+                                                     skip, skipped, threads):
+    """r_antisense_A (Captured when kept, alignment end 9100) gets no window,
+    no adenine count and no site when skip_antisense is set."""
+    fx = antisense_fixture
+    windows = []
+
+    def spy(fasta, chrom, pos, strand, win):
+        windows.append(pos)
+        return downstream_window(fasta, chrom, pos, strand, win)
+
+    monkeypatch.setattr(basecomp, "downstream_window", spy)
+    gene_index, gene_records = build_gene_index(fx["gtf"])
+    polya_index = build_polya_index(fx["polya"], slop=25,
+                                    allowed_types={"TE", "DS", "DI", "EX"})
+    a_count_by_bucket, bucket_counts, orient, site_stats = analyse(
+        bam_path=fx["bam"], fasta_path=fx["fasta"],
+        gene_index=gene_index, gene_records=gene_records,
+        polya_index=polya_index,
+        cov_threshold=0.5, min_mapq=0, window=20, threads=threads,
+        skip_antisense=skip,
+    )
+    assert site_stats["antisense_skipped"] == skipped
+    assert bucket_counts["Captured"] == 4 - skipped
+    assert sorted(a_count_by_bucket["Captured"]) == [0] * (3 - skipped) + [10]
+    assert orient == {"match": 12, "mismatch": 1}
+    assert site_stats["observed"] + site_stats["fallback"] == 13 - skipped
+    if threads == 1:                     # the spy is not seen by forked workers
+        assert (9100 in windows) is not skip
+
+
 def test_summarise_stamps_thresholds():
     out = summarise({})
     th = out["thresholds"]

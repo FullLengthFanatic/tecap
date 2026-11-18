@@ -120,6 +120,13 @@ EXPECTED_HAS_PAS = {
 }
 
 
+# A read antisense to GENE_A (reverse strand on a + gene), for the
+# --strandedness tests. ref=[3000,9100], cov = 2100/3000 = 0.70 -> CAPTURED
+# when antisense reads are kept; alignment end 9100, no A run. Its CB tag,
+# CELL_A, is carried by no other read.
+ANTISENSE_READ = ("r_antisense_A", "GA", 3000, [(0, 500), (3, 3500), (0, 2100)])
+
+
 def _build_fasta(path):
     seq = bytearray(b"C" * CONTIG_LEN)
     # Planted A-stretches for basecomp tests:
@@ -156,20 +163,22 @@ def _build_polya_bed(path):
     return path
 
 
-def _build_bam(sorted_path):
+def _build_bam(sorted_path, reads=READS, flipped=frozenset()):
+    """Reads in `flipped` are written on the strand opposite their gene."""
     header = {
         "HD": {"VN": "1.6", "SO": "coordinate"},
         "SQ": [{"SN": CONTIG, "LN": CONTIG_LEN}],
     }
     unsorted = sorted_path + ".unsorted.bam"
     with pysam.AlignmentFile(unsorted, "wb", header=header) as bam:
-        for (name, gid, start, cigar, *seq) in READS:
+        for (name, gid, start, cigar, *seq) in reads:
             a = pysam.AlignedSegment()
             a.query_name = name
             qlen = sum(length for op, length in cigar if op in (0, 1, 4, 7, 8))
             a.query_sequence  = seq[0] if seq else "C" * qlen
             a.query_qualities = pysam.qualitystring_to_array("I" * qlen)
-            a.flag            = 16 if gid == "GB" else 0  # reverse for minus gene
+            # reverse for minus gene, forward for plus gene; the other way if flipped
+            a.flag           = 16 if (gid == "GB") != (name in flipped) else 0
             a.reference_id    = 0
             a.reference_start = start
             a.mapping_quality = 60
@@ -203,3 +212,22 @@ def synthetic_fixture(tmp_path_factory):
         "expected_has_pas": EXPECTED_HAS_PAS,
         "internal_kept_site": INTERNAL_KEPT_SITE,
     }
+
+
+@pytest.fixture(scope="session")
+def antisense_fixture(synthetic_fixture, tmp_path_factory):
+    """The fixture BAM plus ANTISENSE_READ: 12 reads sense, 1 antisense."""
+    d = tmp_path_factory.mktemp("tecap_antisense")
+    bam_path = _build_bam(str(d / "antisense.bam"), READS + [ANTISENSE_READ],
+                          flipped={ANTISENSE_READ[0]})
+    return {**synthetic_fixture, "bam": bam_path}
+
+
+@pytest.fixture(scope="session")
+def half_flipped_fixture(synthetic_fixture, tmp_path_factory):
+    """The fixture BAM with every other read of READS on the opposite strand:
+    6 of 12 reads antisense to their gene, as in unstranded input."""
+    d = tmp_path_factory.mktemp("tecap_half_flipped")
+    bam_path = _build_bam(str(d / "half_flipped.bam"), READS,
+                          flipped={name for name, *_ in READS[::2]})
+    return {**synthetic_fixture, "bam": bam_path}

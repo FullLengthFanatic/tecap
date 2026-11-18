@@ -1,12 +1,15 @@
 """Tests for BAM-level orchestration: accumulator invariants + thread equivalence."""
 
 
-from tecap.bam import analyse_bam
+import pytest
+
+from tecap.bam import analyse_bam, probe_strandedness
+from tecap.constants import CAPTURED
 from tecap.gtf import build_gene_index
 from tecap.polya import build_polya_index
 
 
-def _run(fx, threads, cb_tag=None):
+def _run(fx, threads, cb_tag=None, skip_antisense=False):
     gene_index, gene_records = build_gene_index(fx["gtf"])
     polya_index = build_polya_index(fx["polya"], slop=25,
                                     allowed_types={"TE", "DS", "DI", "EX"})
@@ -19,7 +22,59 @@ def _run(fx, threads, cb_tag=None):
         min_mapq      = 0,
         threads       = threads,
         cb_tag        = cb_tag,
+        skip_antisense = skip_antisense,
     )
+
+
+def _probe(fx, **kw):
+    gene_index, gene_records = build_gene_index(fx["gtf"])
+    return probe_strandedness(fx["bam"], gene_index, gene_records, **kw)
+
+
+def test_probe_strandedness_on_the_fixture(synthetic_fixture):
+    # Every fixture read is sense to its gene (GA, GC forward; GB reverse).
+    assert _probe(synthetic_fixture, min_mapq=0) == {
+        "reads": len(synthetic_fixture["expected_buckets"]),
+        "match_frac": 1.0, "stranded": True}
+
+
+def test_probe_strandedness_on_half_flipped_reads(half_flipped_fixture):
+    assert _probe(half_flipped_fixture, min_mapq=0) == {
+        "reads": 12, "match_frac": 0.5, "stranded": False}
+
+
+def test_probe_strandedness_stops_at_n(half_flipped_fixture):
+    assert _probe(half_flipped_fixture, min_mapq=0, n=3)["reads"] == 3
+
+
+def test_probe_strandedness_applies_the_mapq_filter(synthetic_fixture):
+    # Every fixture read has MAPQ 60: no read qualifies, the input counts as
+    # unstranded.
+    assert _probe(synthetic_fixture, min_mapq=61) == {
+        "reads": 0, "match_frac": None, "stranded": False}
+
+
+@pytest.mark.parametrize("threads", [1, 2])
+def test_antisense_read_is_skipped_on_stranded_input(antisense_fixture, threads):
+    r = _run(antisense_fixture, threads, cb_tag="CB", skip_antisense=True)
+    assert r["antisense_skipped"] == 1
+    assert r["counts"][CAPTURED] == 3 and r["total"] == 12
+    # Orientation counts every read with a gene, before the skip.
+    assert r["orient"] == {"match": 12, "mismatch": 1}
+    assert sum(r["site"].values()) == 12
+    assert sum(r["utr_bin_total"]) == 12
+    assert "CELL_A" not in r["per_cell"]
+    assert r["per_gene"]["GA"][CAPTURED] == 2
+
+
+@pytest.mark.parametrize("threads", [1, 2])
+def test_antisense_read_is_classified_when_kept(antisense_fixture, threads):
+    r = _run(antisense_fixture, threads, cb_tag="CB")
+    assert r["antisense_skipped"] == 0
+    assert r["counts"][CAPTURED] == 4 and r["total"] == 13
+    assert r["orient"] == {"match": 12, "mismatch": 1}
+    assert r["per_cell"]["CELL_A"] == {CAPTURED: 1}
+    assert r["per_gene"]["GA"][CAPTURED] == 3
 
 
 def test_accumulator_invariants(synthetic_fixture):

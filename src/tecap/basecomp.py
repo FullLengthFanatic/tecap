@@ -8,6 +8,7 @@ from collections import defaultdict
 import numpy as np
 import pysam
 
+from tecap.bam import gene_of_read
 from tecap.classify import classify_read
 from tecap.constants import (
     BASECOMP_GE_HI,
@@ -57,6 +58,7 @@ _WORKER = {
     "min_mapq":      None,
     "window":        None,
     "site_anchor":   None,
+    "skip_antisense": None,
 }
 
 
@@ -112,12 +114,13 @@ def _process_chrom_bc(chrom):
     min_mapq      = _WORKER["min_mapq"]
     window        = _WORKER["window"]
     site_anchor   = _WORKER["site_anchor"]
+    skip_antisense = _WORKER["skip_antisense"]
 
     a_count_by_bucket = defaultdict(list)
     counts            = defaultdict(int)
     n_no_seq          = 0
     orient            = {"match": 0, "mismatch": 0}
-    site_stats        = {"observed": 0, "fallback": 0, "labels": {}}
+    site_stats        = {"observed": 0, "fallback": 0, "antisense_skipped": 0, "labels": {}}
 
     try:
         bam   = pysam.AlignmentFile(bam_path, "rb")
@@ -133,30 +136,9 @@ def _process_chrom_bc(chrom):
         fasta.close()
         return a_count_by_bucket, counts, 0, orient, site_stats
 
+    genes = gene_index[chrom]
     for read in iterator:
-        if (read.is_unmapped or read.is_secondary or
-                read.is_supplementary or not read.cigartuples):
-            continue
-        if read.mapping_quality < min_mapq:
-            continue
-        if not any(op == 3 for op, _ in read.cigartuples):
-            continue
-
-        hits = gene_index[chrom][read.reference_start:read.reference_end]
-        if not hits:
-            continue
-
-        best_gid, best_ovlp = None, 0
-        for iv in hits:
-            gid = iv.data
-            rec = gene_records[gid]
-            if rec["strand"] not in ("+", "-"):
-                continue
-            ovlp = (min(read.reference_end, iv.end) -
-                    max(read.reference_start, iv.begin))
-            if ovlp > best_ovlp:
-                best_ovlp, best_gid = ovlp, gid
-
+        best_gid = gene_of_read(read, genes, gene_records, min_mapq)
         if best_gid is None:
             continue
 
@@ -165,6 +147,9 @@ def _process_chrom_bc(chrom):
             orient["match"] += 1
         else:
             orient["mismatch"] += 1
+            if skip_antisense:
+                site_stats["antisense_skipped"] += 1
+                continue
 
         site, observed = read_site(read, rec["strand"], site_anchor)
         site_stats["observed" if observed else "fallback"] += 1
@@ -205,7 +190,7 @@ def _populated_contigs(bam_path):
 
 def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
             cov_threshold, min_mapq, window, threads=1,
-            site_anchor=SITE_ANCHOR_DEFAULT):
+            site_anchor=SITE_ANCHOR_DEFAULT, skip_antisense=False):
     """Returns (a_count_by_bucket, bucket_counts, orient, site_stats).
 
     a_count_by_bucket holds, per bucket, the integer adenine count of each
@@ -215,6 +200,10 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     observed and those that fell back to the alignment end, and under
     "labels" the label of each bucketed read with an observed site and a
     window, per bucket. Labels are counted only when window is LABEL_WINDOW.
+
+    With skip_antisense, a read whose strand is opposite its gene's is
+    counted in orient and in site_stats["antisense_skipped"], and gets no
+    site, bucket or window.
     """
     contigs = _populated_contigs(bam_path)
     log.info("Basecomp analysing %d populated contigs with %d worker(s) (window=%d)",
@@ -229,12 +218,13 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     _WORKER["min_mapq"]      = min_mapq
     _WORKER["window"]        = window
     _WORKER["site_anchor"]   = site_anchor
+    _WORKER["skip_antisense"] = skip_antisense
 
     a_count_by_bucket = defaultdict(list)
     bucket_counts     = defaultdict(int)
     n_no_seq_total    = 0
     orient            = {"match": 0, "mismatch": 0}
-    site_stats        = {"observed": 0, "fallback": 0, "labels": {}}
+    site_stats        = {"observed": 0, "fallback": 0, "antisense_skipped": 0, "labels": {}}
 
     try:
         if threads <= 1:
@@ -249,6 +239,7 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
                 orient["mismatch"] += ori["mismatch"]
                 site_stats["observed"] += sst["observed"]
                 site_stats["fallback"] += sst["fallback"]
+                site_stats["antisense_skipped"] += sst["antisense_skipped"]
                 for b, by_label in sst["labels"].items():
                     tot = site_stats["labels"].setdefault(b, dict.fromkeys(LABELS, 0))
                     for x, v in by_label.items():
@@ -266,6 +257,7 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
                     orient["mismatch"] += ori["mismatch"]
                     site_stats["observed"] += sst["observed"]
                     site_stats["fallback"] += sst["fallback"]
+                    site_stats["antisense_skipped"] += sst["antisense_skipped"]
                     for b, by_label in sst["labels"].items():
                         tot = site_stats["labels"].setdefault(b, dict.fromkeys(LABELS, 0))
                         for x, v in by_label.items():
