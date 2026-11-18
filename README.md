@@ -146,6 +146,8 @@ Per sample (basecomp):
 
 `frac_ge_60`, `frac_30_50` and `frac_ge_40` are descriptive bands of the adenine share in the window (60% or more, 30% to under 50%, 40% or more). They do not name a priming mechanism. The label is in `frac_templated`, `frac_nontemplated` and `frac_ambiguous`.
 
+Both JSONs say how strandedness was handled. `--strandedness` takes `auto` (the default), `stranded` or `unstranded`; `auto` looks at the first 200,000 reads the run would classify, in BAM order, and calls the input stranded when 0.80 or more of them lie on their gene's strand. `strandedness` records `requested`, `resolved` and `probe` (the probe's `reads`, `match_frac` and `stranded`, null unless `auto`). On stranded input a read antisense to its gene is skipped: it gets no bucket, site or window and is counted in `antisense_skipped` only. `orient_match_frac` is computed before the skip and still counts those reads, while `total`, the category counts and the bucket `n` do not. The HTML report, the MultiQC table and the console summary do not show `strandedness` or `antisense_skipped`. On input that `auto` calls unstranded nothing is skipped, and tecap still warns when the run's BAM/gene-strand match fraction is below 0.80.
+
 Cross-sample:
 - `comparison_terminal_exon.png` — grouped bars across samples.
 - `comparison_basecomp.png` — per-bucket histogram overlays.
