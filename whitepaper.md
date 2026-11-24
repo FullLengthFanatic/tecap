@@ -94,7 +94,7 @@ The text below is the tool's own definition for each bucket (`tecap explain`).
 | **MechB-aspecific** | Read 3' end is upstream of the TE in an intron or gene flank. | Pre-mRNA priming or off-target alignment. |
 | **MechC** | Read 3' end is downstream of the terminal exon end. | Read-through, unannotated 3' UTR extension, or alignment artifact past the annotated TE. |
 
-For the polyA-site buckets (MechA-correct, MechB-APA), tecap further splits reads by whether the supporting atlas cluster carries a canonical AAUAAA-like hexamer: **PAS+** (it does, high confidence) versus **PAS-** (it does not). A read at a PAS- cluster is weaker evidence for real cleavage and a candidate mispriming artifact.
+For the polyA-site buckets (MechA-correct, MechB-APA), tecap further splits reads by whether the supporting atlas cluster carries a canonical AAUAAA-like hexamer: **PAS+** (it does, high confidence) versus **PAS-** (it does not). A read at a PAS- cluster is weaker evidence for real cleavage; its label says whether the site is templated.
 
 ---
 
@@ -116,7 +116,7 @@ Direct-RNA sequencing is refused at the command line on purpose. There is no rev
 - **Terminal exon coverage**: overlap of the read with the TE divided by TE length. The default **0.5** threshold is what separates Captured from the truncated buckets.
 - **PolyA matching**: a 3' end counts as "at a polyA site" if it falls within **+-25 bp** of an atlas cluster on the same strand.
 - **Downstream base composition**: the adenines in the **20 nt** reference window 3' of the site, counted as an integer. Per bucket tecap reports how many reads with an observed site are templated (8 or more), non-templated (4 or fewer) or ambiguous (5 to 7), and the adenine share as a histogram and three bands. `frac_ge_60`, `frac_30_50` and `frac_ge_40` are descriptive bands of the adenine share in the window (60% or more, 30% to under 50%, 40% or more). They do not name a priming mechanism. The label is in `frac_templated`, `frac_nontemplated` and `frac_ambiguous`.
-- **UTR-length stratification**: capture and MechA-correct rates are broken out by 3' UTR length bins (0-500, 500-1k, 1k-2k, 2k-5k, >5k bp), because mispriming bias concentrates in long-UTR genes.
+- **UTR-length stratification**: capture and MechA-correct rates are broken out by 3' UTR length bins (0-500, 500-1k, 1k-2k, 2k-5k, >5k bp), because capture failures concentrate in long-UTR genes.
 - **Orientation sanity check**: the fraction of reads whose alignment strand matches the gene strand (`orient_match_frac`), a check that the input is properly stranded.
 
 ### Outputs
@@ -243,8 +243,10 @@ tecap is MIT licensed. If you use it, cite the GitHub release DOI ([10.5281/zeno
 |---|---|
 | **TE** | Terminal exon. The last exon of a transcript, where the 3' UTR and the canonical polyA site live. tecap classifies reads by where their 3' end lands relative to the TE. |
 | **UTR** | Untranslated region. The 3' UTR is the part of the terminal exon downstream of the stop codon, between the CDS end and the polyA site. Most real polyA cleavage happens here. |
-| **CDS** | Coding sequence. The protein-coding portion of a transcript. A 3' end inside the TE's CDS portion is flagged IP-TE-CDS, a strong internal-priming signal. |
+| **CDS** | Coding sequence. The protein-coding portion of a transcript. A 3' end inside the TE's CDS portion is flagged IP-TE-CDS. |
 | **polyA** | Polyadenylation. The 3' processing step that cleaves the pre-mRNA and adds a poly(A) tail. tecap uses the PolyASite atlas to know where real cleavage clusters are. |
 | **PAS** | Polyadenylation signal. The canonical AAUAAA-like hexamer ~10-30 nt upstream of a real cleavage site. tecap splits polyA-site reads into PAS+ (hexamer present) and PAS- (absent). |
-| **APA** | Alternative polyadenylation. mRNA isoforms that differ in their 3' end through use of upstream polyA sites. MechB-APA captures these biological events and separates them from artifacts. |
+| **APA** | Alternative polyadenylation. mRNA isoforms that differ in their 3' end through use of upstream polyA sites. MechB-APA captures these biological events and keeps them apart from sites with no annotated polyA cluster. |
 | **oligo-dT** | A short DNA oligo of consecutive T's used to capture poly(A)-tailed mRNA. Internal priming happens when it anneals to A-rich genomic stretches instead of the real poly(A) tail. |
+| **site** | Where on the reference the read was primed, on the gene strand. With --site-anchor a_run_start (the default) it is where the read's terminal adenine run starts, aligned and clipped adenines counted together (10 or more, one other base allowed); with alignment_end, or for a read without such a run, it is the alignment end. A bucket says where the site is. |
+| **label** | What kind of site it is, from the adenines in the 20 nt of reference downstream of the site: templated (8 or more, internal priming), non-templated (4 or fewer, priming on the poly(A) tail) or ambiguous (5 to 7). A read whose site fell back to the alignment end gets no label. |
