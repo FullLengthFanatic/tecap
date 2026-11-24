@@ -185,6 +185,8 @@ off-by-one under Fixed. JSON schema 0.2.
   `(a_count_by_bucket, bucket_counts, orient, site_stats)`, integer
   adenine counts in place of shares plus a fourth element;
   `basecomp.summarise` takes those counts and `window` and `labels`;
+  `bam.analyse_bam` and `basecomp.analyse` take `site_anchor` (default
+  `a_run_start`, so a caller that does not pass it gets the new numbers);
   `bam.analyse_bam` returns a `site` key; `classify.classify_read` takes
   `read_3prime`. `basecomp.pct_a` is removed.
 - Disambiguated `BD46_FS_SEQ` in the README and basecomp plot
