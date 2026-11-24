@@ -32,8 +32,8 @@ log = logging.getLogger(__name__)
 def warn_if_unstranded(orient_match_frac, log):
     """Emit a loud warning when the BAM/gene-strand match fraction signals
     unstranded input. The read 3' end and the basecomp downstream window are
-    both defined from the alignment strand, so random orientation makes them
-    meaningless and dilutes the metrics toward the genomic mean."""
+    both defined from the gene strand, so reads antisense to their gene make
+    them meaningless and dilute the metrics toward the genomic mean."""
     if orient_match_frac is None:
         return
     if orient_match_frac < ORIENT_MIN_FRAC:
@@ -312,8 +312,8 @@ def analyse_bam(bam_path, gene_index, gene_records, polya_index,
                 cov_threshold, min_mapq, threads=1, cb_tag=None,
                 cb_probe_reads=10_000, site_anchor=SITE_ANCHOR_DEFAULT,
                 skip_antisense=False):
-    """Process a BAM in parallel by contig. Returns a results dict matching
-    the v0.1 JSON schema.
+    """Process a BAM in parallel by contig. Returns the results dict behind
+    the classify JSON (schema SCHEMA_VERSION).
 
     Empty contigs (mapped=0 in the BAM index) are skipped. With threads > 1,
     the pool is forked from a parent that has placed the gene/polyA indices
