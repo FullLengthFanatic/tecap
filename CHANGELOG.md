@@ -106,7 +106,9 @@ off-by-one under Fixed. JSON schema 0.2.
     `utr_bin_mecha_rate`, `cov_median_by_cat`, `read_len_median_mecha`,
     `per_cell_metrics`, the per-gene TSV, and the MultiQC columns
     `mecha_correct_pct`, `mechb_aspeci_pct`, `mecha_pas_pos_frac` and
-    `mechb_apa_pas_pos_frac`.
+    `mechb_apa_pas_pos_frac`. `cov_median_by_cat` and
+    `read_len_median_mecha` did not change between the anchors on chr21
+    but can.
 
   `--site-anchor alignment_end --strandedness unstranded` reproduces
   0.4.0, apart from the off-by-one under Fixed. Old and new values are in
@@ -114,34 +116,48 @@ off-by-one under Fixed. JSON schema 0.2.
 - On stranded input a read antisense to its best-overlap gene is
   classified against the best-overlap gene on its own strand, or skipped
   when no gene on its strand overlaps it (`--strandedness`, see Added).
-  The default `auto` calls both libraries
-  below stranded (probe match fraction 0.984 for BD67 and 0.978 for
-  10x_FL on the FLNC BAM, 0.994 and 0.988 on chr21 of `accepted.bam`), so
-  their 0.5.0 numbers leave the skipped reads out. Reads skipped, of the reads
-  assigned to a gene: `basecomp` on the whole FLNC BAM, 1,755,777 of
-  50,538,102 (3.47%) for BD67 and 2,214,195 of 52,814,167 (4.19%) for
-  10x_FL; `classify` on chr21 of `accepted.bam`, 6,073 of 438,044 (1.39%)
-  and 7,405 of 410,831 (1.80%). In `basecomp` MechB_aspecific loses the
-  most: under the default anchor 1,359,294 of 3,323,636 reads (40.9%) for
-  BD67 and 1,646,175 of 5,440,400 (30.3%) for 10x_FL, and its bands rise
-  (BD67 `frac_ge_60` 0.280 without the skip, 0.471 with it). The other
-  buckets lose 0.01% to 1.8% of their reads. Numbers that change on
-  stranded input, under either anchor:
+  The default `auto` calls both libraries of the tables below stranded
+  (probe match fraction 0.984 for BD67 and 0.978 for 10x_FL on the FLNC
+  BAM, 0.994 and 0.988 on chr21 of `accepted.bam`), so their 0.5.0
+  numbers count the reassigned reads under their new gene and leave the
+  skipped reads out. Of the reads assigned to a gene, reassigned and
+  skipped: `basecomp` on the whole FLNC BAM, 1,569,441 (3.11%) and
+  186,336 (0.37%) of 50,538,102 for BD67, 1,707,819 (3.23%) and 506,376
+  (0.96%) of 52,814,167 for 10x_FL; `classify` on chr21 of
+  `accepted.bam`, 5,404 (1.23%) and 669 (0.15%) of 438,044, 5,244
+  (1.28%) and 2,161 (0.53%) of 410,831. In `basecomp` 89% (BD67) and 77%
+  (10x_FL) of the antisense reads are reassigned. Without the
+  reassignment they were classified against the gene on the other
+  strand, most of them as MechB_aspecific. `antisense_reassigned` also
+  counts reads whose overlap with a gene on their own strand equals the
+  overlap with the gene on the other strand that the either-strand choice
+  took (the first in interval-tree order): on chr21, 4,515 of the 5,404
+  reassigned BD67 reads and 3,996 of the 5,244 10x_FL reads. CBR1, a
+  plus-strand gene inside the spans of SETD4 and CBR1-AS1 on the minus
+  strand, receives 3,871 and 2,746 of the reassigned reads. In
+  `basecomp`, under the
+  default anchor and against `--strandedness unstranded`, MechB_aspecific
+  loses the most: 3,323,636 to 2,015,345 reads (-39.4%) for BD67 and
+  5,440,400 to 3,906,267 (-28.2%) for 10x_FL, and its bands rise
+  (`frac_ge_60` 0.280 to 0.472 and 0.398 to 0.568). Captured gains the
+  most reads, 696,776 (+3.1%) and 600,658 (+3.5%), then MechB_exon
+  (+4.3% and +3.1%); the other buckets change by -0.2% to +2.0%. Numbers
+  that change on stranded input, under either anchor:
   - `basecomp`: `n` of every bucket, `Captured` included, with `hist`,
-    `mean` and the three bands; `median` in some buckets; the label keys
-    (in every bucket under `alignment_end`, in some under the default
-    anchor, as most antisense reads have no observed site); `site_counts`.
+    `mean`, the three bands and the label keys; `median` of
+    MechB_aspecific; `site_counts`.
   - `classify`: `total`, `site_counts`, and `counts` and `fractions` of
     every category, `Captured (>=50%)` included; `pas_counts`,
     `pas_fraction`, `utr_bin_total`, `utr_bin_captured`,
     `utr_bin_capt_rate`, `utr_bin_mecha_correct`, `utr_bin_mecha_rate`,
     `cov_median_by_cat`, `read_len_median_capt`, `per_cell_metrics`, the
-    per-gene TSV (genes with only antisense reads drop out: 247 to 237
-    genes for BD67 and 289 to 269 for 10x_FL on chr21), and the MultiQC
-    columns `captured_pct`, `mecha_correct_pct`, `mechb_aspeci_pct`,
+    per-gene TSV (genes whose reads are all skipped drop out, genes that
+    receive reassigned reads come in: 247 to 263 genes for BD67 and 289
+    to 310 for 10x_FL on chr21), and the MultiQC columns
+    `captured_pct`, `mecha_correct_pct`, `mechb_aspeci_pct`,
     `mecha_pas_pos_frac`, `mechb_apa_pas_pos_frac` and
-    `total_classified`. `read_len_median_mecha` did not change on chr21
-    but can.
+    `total_classified`. `read_len_median_mecha` changed on chr21 for
+    BD67 (715 to 717), not for 10x_FL.
 
   `orient_match_frac` does not change: it is computed before the
   reassignment and the skip. With `--strandedness unstranded`, or under
@@ -181,41 +197,42 @@ Cell Ranger GRCh38-2024-A FASTA and GTF, PolyASite 3.0 atlas
 (`atlas.clusters.3.0.GRCh38.GENCODE_42`), `--polya-slop 25`,
 `--platform cdna-pacbio`. The 0.5.0 runs use the default `--strandedness
 auto`, which calls both libraries stranded, so their antisense reads are
-skipped.
+classified against a gene on their own strand, or skipped when there is
+none.
 
 `basecomp` on the whole FLNC BAM, `--window 20`. `n` is given for 0.4.0,
 for 0.5.0 with `--site-anchor alignment_end` (the Fixed entry and the
-antisense skip) and for 0.5.0 with the default; the other cells read
+stranded gene choice) and for 0.5.0 with the default; the other cells read
 0.4.0 / 0.5.0 default.
 
 BD67:
 
 | bucket | `n` 0.4.0 | `n` `alignment_end` | `n` 0.5.0 | `median` | `mean` | `frac_ge_60` | `frac_30_50` | `frac_ge_40` |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Captured | 22,204,457 | 22,042,556 | 22,042,556 | 0.15 / 0.20 | 0.154 / 0.250 | 0.005 / 0.076 | 0.118 / 0.213 | 0.047 / 0.182 |
-| MechA_PAS+ | 7,369,742 | 7,360,616 | 7,344,817 | 0.20 / 0.25 | 0.201 / 0.312 | 0.010 / 0.128 | 0.208 / 0.304 | 0.097 / 0.283 |
-| MechA_PAS- | 2,143,146 | 2,125,640 | 2,107,229 | 0.30 / 0.70 | 0.278 / 0.616 | 0.023 / 0.619 | 0.413 / 0.143 | 0.241 / 0.792 |
-| MechB_APA_PAS+ | 2,058,349 | 2,035,295 | 1,953,001 | 0.40 / 0.55 | 0.348 / 0.470 | 0.101 / 0.453 | 0.391 / 0.152 | 0.517 / 0.692 |
-| MechB_APA_PAS- | 3,809,570 | 3,788,237 | 3,974,590 | 0.35 / 0.50 | 0.366 / 0.494 | 0.048 / 0.372 | 0.527 / 0.306 | 0.475 / 0.740 |
-| MechB_exon | 7,280,915 | 7,595,057 | 7,583,909 | 0.25 / 0.30 | 0.246 / 0.377 | 0.021 / 0.220 | 0.302 / 0.273 | 0.215 / 0.421 |
-| MechB_aspecific | 3,807,115 | 2,052,650 | 1,964,342 | 0.20 / 0.55 | 0.233 / 0.551 | 0.019 / 0.471 | 0.302 / 0.236 | 0.185 / 0.645 |
-| IP_TE_CDS | 1,288,723 | 1,283,380 | 1,314,216 | 0.35 / 0.55 | 0.352 / 0.521 | 0.064 / 0.446 | 0.429 / 0.247 | 0.471 / 0.760 |
+| Captured | 22,204,457 | 22,901,233 | 22,901,233 | 0.15 / 0.20 | 0.154 / 0.251 | 0.005 / 0.076 | 0.118 / 0.216 | 0.047 / 0.182 |
+| MechA_PAS+ | 7,369,742 | 7,465,657 | 7,450,232 | 0.20 / 0.25 | 0.201 / 0.313 | 0.010 / 0.128 | 0.208 / 0.305 | 0.097 / 0.285 |
+| MechA_PAS- | 2,143,146 | 2,175,565 | 2,160,177 | 0.30 / 0.65 | 0.278 / 0.615 | 0.023 / 0.617 | 0.413 / 0.143 | 0.241 / 0.792 |
+| MechB_APA_PAS+ | 2,058,349 | 2,057,652 | 1,971,432 | 0.40 / 0.55 | 0.348 / 0.472 | 0.101 / 0.455 | 0.391 / 0.152 | 0.517 / 0.693 |
+| MechB_APA_PAS- | 3,809,570 | 3,817,856 | 4,008,486 | 0.35 / 0.50 | 0.366 / 0.494 | 0.048 / 0.372 | 0.527 / 0.306 | 0.475 / 0.740 |
+| MechB_exon | 7,280,915 | 8,004,426 | 7,994,187 | 0.25 / 0.30 | 0.246 / 0.370 | 0.021 / 0.212 | 0.302 / 0.268 | 0.215 / 0.410 |
+| MechB_aspecific | 3,807,115 | 2,104,891 | 2,015,345 | 0.20 / 0.55 | 0.233 / 0.550 | 0.019 / 0.472 | 0.302 / 0.235 | 0.185 / 0.645 |
+| IP_TE_CDS | 1,288,723 | 1,305,465 | 1,338,263 | 0.35 / 0.55 | 0.352 / 0.522 | 0.064 / 0.447 | 0.429 / 0.246 | 0.471 / 0.761 |
 
 10x_FL:
 
 | bucket | `n` 0.4.0 | `n` `alignment_end` | `n` 0.5.0 | `median` | `mean` | `frac_ge_60` | `frac_30_50` | `frac_ge_40` |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Captured | 17,050,085 | 16,854,141 | 16,854,141 | 0.15 / 0.20 | 0.168 / 0.248 | 0.005 / 0.078 | 0.146 / 0.211 | 0.064 / 0.190 |
-| MechA_PAS+ | 6,903,399 | 6,891,416 | 6,819,914 | 0.20 / 0.25 | 0.206 / 0.306 | 0.008 / 0.131 | 0.220 / 0.267 | 0.110 / 0.281 |
-| MechA_PAS- | 2,156,472 | 2,126,324 | 2,139,418 | 0.30 / 0.60 | 0.278 / 0.589 | 0.021 / 0.552 | 0.419 / 0.180 | 0.241 / 0.829 |
-| MechB_APA_PAS+ | 2,848,163 | 2,803,405 | 2,724,707 | 0.40 / 0.55 | 0.371 / 0.509 | 0.099 / 0.485 | 0.445 / 0.150 | 0.549 / 0.791 |
-| MechB_APA_PAS- | 6,592,149 | 6,551,274 | 6,804,851 | 0.35 / 0.55 | 0.362 / 0.511 | 0.048 / 0.373 | 0.515 / 0.273 | 0.463 / 0.826 |
-| MechB_exon | 9,048,790 | 9,187,025 | 9,105,821 | 0.25 / 0.35 | 0.264 / 0.393 | 0.022 / 0.235 | 0.337 / 0.270 | 0.246 / 0.497 |
-| MechB_aspecific | 5,801,012 | 3,883,592 | 3,794,225 | 0.25 / 0.60 | 0.275 / 0.590 | 0.031 / 0.568 | 0.367 / 0.178 | 0.264 / 0.807 |
-| IP_TE_CDS | 1,768,090 | 1,753,897 | 1,811,570 | 0.35 / 0.55 | 0.348 / 0.528 | 0.057 / 0.428 | 0.420 / 0.260 | 0.461 / 0.835 |
+| Captured | 17,050,085 | 17,650,743 | 17,650,743 | 0.15 / 0.20 | 0.168 / 0.251 | 0.005 / 0.081 | 0.146 / 0.213 | 0.064 / 0.192 |
+| MechA_PAS+ | 6,903,399 | 7,033,802 | 6,962,065 | 0.20 / 0.25 | 0.206 / 0.307 | 0.008 / 0.132 | 0.220 / 0.271 | 0.110 / 0.283 |
+| MechA_PAS- | 2,156,472 | 2,184,984 | 2,198,003 | 0.30 / 0.60 | 0.278 / 0.588 | 0.021 / 0.550 | 0.419 / 0.180 | 0.241 / 0.828 |
+| MechB_APA_PAS+ | 2,848,163 | 2,832,890 | 2,749,479 | 0.40 / 0.55 | 0.371 / 0.509 | 0.099 / 0.485 | 0.445 / 0.150 | 0.549 / 0.792 |
+| MechB_APA_PAS- | 6,592,149 | 6,622,086 | 6,881,507 | 0.35 / 0.55 | 0.362 / 0.511 | 0.048 / 0.373 | 0.515 / 0.274 | 0.463 / 0.826 |
+| MechB_exon | 9,048,790 | 9,615,201 | 9,534,036 | 0.25 / 0.35 | 0.264 / 0.387 | 0.022 / 0.228 | 0.337 / 0.265 | 0.246 / 0.484 |
+| MechB_aspecific | 5,801,012 | 3,996,726 | 3,906,267 | 0.25 / 0.60 | 0.275 / 0.590 | 0.031 / 0.568 | 0.367 / 0.177 | 0.264 / 0.805 |
+| IP_TE_CDS | 1,768,090 | 1,797,025 | 1,857,604 | 0.35 / 0.55 | 0.348 / 0.528 | 0.057 / 0.429 | 0.420 / 0.258 | 0.461 / 0.835 |
 
-Under the default, `site_counts` is 43,780,242 observed and 5,002,083
-fallback for BD67, 41,339,290 and 9,260,682 for 10x_FL.
+Under the default, `site_counts` is 45,226,087 observed and 5,125,679
+fallback for BD67, 42,717,205 and 9,590,586 for 10x_FL.
 
 `classify` on chr21 of the reads that flight-polyafilter-bench stage 30
 accepts and passes to tecap (`<lib>/tecap/accepted.bam`), with its options
@@ -223,23 +240,23 @@ accepts and passes to tecap (`<lib>/tecap/accepted.bam`), with its options
 
 | category | BD67 0.4.0 | BD67 `alignment_end` | BD67 0.5.0 | 10x_FL 0.4.0 | 10x_FL `alignment_end` | 10x_FL 0.5.0 |
 |---|---:|---:|---:|---:|---:|---:|
-| Captured (>=50%) | 200,666 | 196,518 | 196,518 | 105,086 | 101,810 | 101,810 |
-| MechA-correct | 56,326 | 56,319 | 56,317 | 48,043 | 47,997 | 47,993 |
-| MechA-internalUTR | 467 | 467 | 467 | 451 | 439 | 439 |
-| Internal priming in TE CDS (no UTR) | 9,880 | 9,877 | 9,879 | 19,136 | 19,122 | 19,126 |
-| MechA: in TE, non-coding gene | 1,124 | 1,067 | 1,067 | 1,116 | 1,055 | 1,055 |
-| MechB-APA | 57,993 | 57,921 | 58,665 | 104,811 | 104,587 | 105,906 |
-| MechB-exon | 91,693 | 92,829 | 93,228 | 90,482 | 90,662 | 90,508 |
-| MechB-aspecific | 19,885 | 16,968 | 15,825 | 41,648 | 37,708 | 36,543 |
-| MechC | 10 | 5 | 5 | 58 | 46 | 46 |
-| total | 438,044 | 431,971 | 431,971 | 410,831 | 403,426 | 403,426 |
+| Captured (>=50%) | 200,666 | 201,144 | 201,144 | 105,086 | 105,467 | 105,467 |
+| MechA-correct | 56,326 | 56,612 | 56,610 | 48,043 | 48,150 | 48,146 |
+| MechA-internalUTR | 467 | 471 | 471 | 451 | 443 | 443 |
+| Internal priming in TE CDS (no UTR) | 9,880 | 9,886 | 9,888 | 19,136 | 19,191 | 19,195 |
+| MechA: in TE, non-coding gene | 1,124 | 1,093 | 1,093 | 1,116 | 1,109 | 1,109 |
+| MechB-APA | 57,993 | 57,962 | 58,706 | 104,811 | 104,748 | 106,079 |
+| MechB-exon | 91,693 | 92,987 | 93,405 | 90,482 | 91,007 | 90,850 |
+| MechB-aspecific | 19,885 | 17,215 | 16,053 | 41,648 | 38,486 | 37,312 |
+| MechC | 10 | 5 | 5 | 58 | 69 | 69 |
+| total | 438,044 | 437,375 | 437,375 | 410,831 | 408,670 | 408,670 |
 
-Between `alignment_end` and the default, 1,960 of 431,971 BD67 reads
-(0.45%) and 2,676 of 403,426 10x_FL reads (0.66%) change category, most
-of them from MechB-aspecific to MechB-exon (1,161 and 1,233) and from
-MechB-exon to MechB-APA (757 and 1,332). MechB-APA `pas_fraction` is
-0.372 in 0.4.0, 0.371 under `alignment_end` and 0.259 under the default
-for BD67; 0.322, 0.313 and 0.263 for 10x_FL.
+Between `alignment_end` and the default, 1,979 of 437,375 BD67 reads
+(0.45%) and 2,697 of 408,670 10x_FL reads (0.66%) change category, most
+of them from MechB-aspecific to MechB-exon (1,180 and 1,242) and from
+MechB-exon to MechB-APA (757 and 1,344). MechB-APA `pas_fraction` is
+0.372 in 0.4.0, 0.372 under `alignment_end` and 0.259 under the default
+for BD67; 0.322, 0.314 and 0.264 for 10x_FL.
 
 ### Fixed
 - Plus-strand off-by-one in `classify`, which also assigns the `basecomp`
@@ -253,8 +270,8 @@ for BD67; 0.322, 0.313 and 0.263 for 10x_FL.
   MechA-internalUTR) and the PAS+ / PAS- split had the same shift.
   Minus-strand genes were right. The tests now use the last cDNA base
   under both anchors. What it moves, 0.4.0 against 0.5.0 with
-  `--site-anchor alignment_end --strandedness unstranded`, so that the
-  antisense skip does not enter:
+  `--site-anchor alignment_end --strandedness unstranded`, so that
+  neither the reassignment nor the skip enters:
   - `classify`, chr21: MechB-aspecific 19,885 to 18,348 and MechB-exon
     91,693 to 93,230 (BD67); MechB-aspecific 41,648 to 40,937, MechB-exon
     90,482 to 91,194 and MechB-APA 104,811 to 104,810 (10x_FL).
