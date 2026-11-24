@@ -127,6 +127,28 @@ EXPECTED_HAS_PAS = {
 ANTISENSE_READ = ("r_antisense_A", "GA", 3000, [(0, 500), (3, 3500), (0, 2100)])
 
 
+# GENE_D: - strand, non-coding, in GENE_A's first intron; in the GTF of
+# reassign_fixture only. Exons: [1600,2000] (TE on minus), [2600,2900].
+# No fixture read of READS overlaps it more than it overlaps GENE_A.
+GENE_D = {
+    "gid": "GD",
+    "strand": "-",
+    "exons": [(1600, 2000), (2600, 2900)],
+    "cds":   [],
+}
+
+# A read antisense to GENE_A (reverse strand on a + gene) that also overlaps
+# GENE_D, a gene on its own strand. ref=[2700,3600]: 900 bp of GENE_A's span,
+# 200 bp of GENE_D's, so GENE_A is its best-overlap gene on either strand.
+# Its 15 clipped T's are a poly(A) tail on the minus strand. Against GENE_D:
+# site 2700 (observed), in GENE_D's upstream exon -> MechB-exon. Against
+# GENE_A: no A run at its right end, site 3600 (fallback under a_run_start),
+# in GENE_A's second intron -> MechB-aspecific. Its CB tag, CELL_D, is
+# carried by no other read.
+REASSIGNED_READ = ("r_reassigned_D", "GA", 2700,
+                   [(4, 15), (0, 100), (3, 700), (0, 100)], "T" * 15 + "C" * 200)
+
+
 def _build_fasta(path):
     seq = bytearray(b"C" * CONTIG_LEN)
     # Planted A-stretches for basecomp tests:
@@ -143,9 +165,9 @@ def _build_fasta(path):
     return path
 
 
-def _build_gtf(path):
+def _build_gtf(path, genes=GENES):
     lines = []
-    for g in GENES:
+    for g in genes:
         attrs = f'gene_id "{g["gid"]}"; gene_name "{g["gid"]}_sym";'
         for (s, e) in g["exons"]:
             lines.append(f"{CONTIG}\thavana\texon\t{s+1}\t{e}\t.\t{g['strand']}\t.\t{attrs}")
@@ -221,6 +243,19 @@ def antisense_fixture(synthetic_fixture, tmp_path_factory):
     bam_path = _build_bam(str(d / "antisense.bam"), READS + [ANTISENSE_READ],
                           flipped={ANTISENSE_READ[0]})
     return {**synthetic_fixture, "bam": bam_path}
+
+
+@pytest.fixture(scope="session")
+def reassign_fixture(synthetic_fixture, tmp_path_factory):
+    """GENE_D added to the GTF; the fixture BAM plus ANTISENSE_READ (no gene
+    on its strand) and REASSIGNED_READ (GENE_D on its strand): 12 reads sense
+    to their best-overlap gene, 2 antisense."""
+    d = tmp_path_factory.mktemp("tecap_reassign")
+    gtf_path = _build_gtf(str(d / "reassign.gtf"), GENES + [GENE_D])
+    bam_path = _build_bam(str(d / "reassign.bam"),
+                          READS + [ANTISENSE_READ, REASSIGNED_READ],
+                          flipped={ANTISENSE_READ[0], REASSIGNED_READ[0]})
+    return {**synthetic_fixture, "gtf": gtf_path, "bam": bam_path}
 
 
 @pytest.fixture(scope="session")

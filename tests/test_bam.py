@@ -1,12 +1,14 @@
 """Tests for BAM-level orchestration: accumulator invariants + thread equivalence."""
 
 
+import pysam
 import pytest
 
-from tecap.bam import analyse_bam, probe_strandedness
-from tecap.constants import CAPTURED
+from tecap.bam import analyse_bam, choose_gene, gene_of_read, probe_strandedness
+from tecap.constants import CAPTURED, MECH_B_ASPECI, MECH_B_EXON
 from tecap.gtf import build_gene_index
 from tecap.polya import build_polya_index
+from tests.conftest import ANTISENSE_READ, CONTIG, CONTIG_LEN, REASSIGNED_READ
 
 
 def _run(fx, threads, cb_tag=None, skip_antisense=False):
@@ -54,10 +56,99 @@ def test_probe_strandedness_applies_the_mapq_filter(synthetic_fixture):
         "reads": 0, "match_frac": None, "stranded": False}
 
 
+_HEADER = pysam.AlignmentHeader.from_dict(
+    {"HD": {"VN": "1.6"}, "SQ": [{"SN": CONTIG, "LN": CONTIG_LEN}]})
+
+
+def _segment(start, cigar, reverse, seq=None):
+    """A hand-built primary record on the fixture contig, MAPQ 60."""
+    a = pysam.AlignedSegment(_HEADER)
+    a.query_name = "r_hand"
+    qlen = sum(n for op, n in cigar if op in (0, 1, 4, 7, 8))
+    a.query_sequence = seq or "C" * qlen
+    a.flag = 16 if reverse else 0
+    a.reference_id = 0
+    a.reference_start = start
+    a.mapping_quality = 60
+    a.cigartuples = cigar
+    return a
+
+
+_ANTISENSE  = dict(start=ANTISENSE_READ[2], cigar=ANTISENSE_READ[3])
+_REASSIGNED = dict(start=REASSIGNED_READ[2], cigar=REASSIGNED_READ[3],
+                   seq=REASSIGNED_READ[4])
+
+
+def test_gene_of_read_on_one_strand(reassign_fixture):
+    gene_index, gene_records = build_gene_index(reassign_fixture["gtf"])
+    genes = gene_index[CONTIG]
+    read = _segment(reverse=True, **_REASSIGNED)
+    assert gene_of_read(read, genes, gene_records, 0) == "GA"
+    assert gene_of_read(read, genes, gene_records, 0, strand="+") == "GA"
+    assert gene_of_read(read, genes, gene_records, 0, strand="-") == "GD"
+    # Task 2.8's antisense read: no minus-strand gene overlaps it.
+    read = _segment(reverse=True, **_ANTISENSE)
+    assert gene_of_read(read, genes, gene_records, 0, strand="-") is None
+    assert gene_of_read(read, genes, gene_records, 0, strand="+") == "GA"
+
+
+@pytest.mark.parametrize("read, skip, want", [
+    # Dropped by gene_of_read (no N in the CIGAR), with and without skip.
+    (dict(start=3000, cigar=[(0, 600)], reverse=False), True,  (None, None)),
+    (dict(start=3000, cigar=[(0, 600)], reverse=False), False, (None, None)),
+    # Forward read on the + gene GA.
+    (dict(reverse=False, **_ANTISENSE),  True,  ("GA", "sense")),
+    (dict(reverse=False, **_ANTISENSE),  False, ("GA", "sense")),
+    # Reverse on GA, unstranded: GA, as before Task 2.10.
+    (dict(reverse=True,  **_ANTISENSE),  False, ("GA", "antisense")),
+    (dict(reverse=True,  **_REASSIGNED), False, ("GA", "antisense")),
+    # Reverse on GA, stranded: GD when a minus gene overlaps it, else skipped.
+    (dict(reverse=True,  **_REASSIGNED), True,  ("GD", "reassigned")),
+    (dict(reverse=True,  **_ANTISENSE),  True,  (None, "skipped")),
+])
+def test_choose_gene_outcomes(reassign_fixture, read, skip, want):
+    gene_index, gene_records = build_gene_index(reassign_fixture["gtf"])
+    got = choose_gene(_segment(**read), gene_index[CONTIG], gene_records, 0, skip)
+    assert got == want
+
+
+@pytest.mark.parametrize("threads", [1, 2])
+def test_antisense_read_with_a_gene_on_its_strand_is_reassigned(reassign_fixture, threads):
+    """Stranded: r_reassigned_D is classified against GD (MechB-exon, observed
+    site), r_antisense_A has no gene on its strand and is skipped."""
+    r = _run(reassign_fixture, threads, cb_tag="CB", skip_antisense=True)
+    assert (r["antisense_skipped"], r["antisense_reassigned"]) == (1, 1)
+    # Orientation is taken against the best-overlap gene on either strand.
+    assert r["orient"] == {"match": 12, "mismatch": 2}
+    assert r["total"] == 13
+    assert (r["counts"][CAPTURED], r["counts"][MECH_B_EXON],
+            r["counts"][MECH_B_ASPECI]) == (3, 2, 1)
+    assert r["site"] == {"observed": 2, "fallback": 11}
+    assert sum(r["utr_bin_total"]) == 13
+    assert r["per_gene"]["GD"] == {MECH_B_EXON: 1}
+    assert r["per_cell"]["CELL_D"] == {MECH_B_EXON: 1}
+    assert "CELL_A" not in r["per_cell"]
+
+
+@pytest.mark.parametrize("threads", [1, 2])
+def test_antisense_reads_keep_their_gene_on_unstranded_input(reassign_fixture, threads):
+    r = _run(reassign_fixture, threads, cb_tag="CB")
+    assert (r["antisense_skipped"], r["antisense_reassigned"]) == (0, 0)
+    assert r["orient"] == {"match": 12, "mismatch": 2}
+    assert r["total"] == 14
+    assert (r["counts"][CAPTURED], r["counts"][MECH_B_EXON],
+            r["counts"][MECH_B_ASPECI]) == (4, 1, 2)
+    assert r["site"] == {"observed": 1, "fallback": 13}
+    assert "GD" not in r["per_gene"]
+    assert r["per_cell"]["CELL_D"] == {MECH_B_ASPECI: 1}
+    assert r["per_cell"]["CELL_A"] == {CAPTURED: 1}
+
+
 @pytest.mark.parametrize("threads", [1, 2])
 def test_antisense_read_is_skipped_on_stranded_input(antisense_fixture, threads):
     r = _run(antisense_fixture, threads, cb_tag="CB", skip_antisense=True)
     assert r["antisense_skipped"] == 1
+    assert r["antisense_reassigned"] == 0
     assert r["counts"][CAPTURED] == 3 and r["total"] == 12
     # Orientation counts every read with a gene, before the skip.
     assert r["orient"] == {"match": 12, "mismatch": 1}

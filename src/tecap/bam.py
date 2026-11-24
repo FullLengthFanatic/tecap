@@ -47,12 +47,13 @@ def warn_if_unstranded(orient_match_frac, log):
         )
 
 
-def gene_of_read(read, genes, gene_records, min_mapq):
-    """Gene id a read is classified against, or None when the read is
-    dropped: not primary, unmapped, no CIGAR, MAPQ below min_mapq, no N in
-    the CIGAR, or no overlapping gene with strand + or -. Otherwise the gene
-    of `genes` (the gene index of the read's contig) whose span overlaps the
-    read's reference span the most."""
+def gene_of_read(read, genes, gene_records, min_mapq, strand=None):
+    """Best-overlap gene id of a read, or None when the read is dropped: not
+    primary, unmapped, no CIGAR, MAPQ below min_mapq, no N in the CIGAR, or
+    no overlapping gene with strand + or - (with `strand` "+" or "-", of that
+    strand). Otherwise the gene of `genes` (the gene index of the read's
+    contig) whose span overlaps the read's reference span the most; with
+    `strand`, only genes of that strand compete."""
     if (read.is_unmapped or read.is_secondary or
             read.is_supplementary or not read.cigartuples):
         return None
@@ -67,11 +68,34 @@ def gene_of_read(read, genes, gene_records, min_mapq):
         rec = gene_records[gid]
         if rec["strand"] not in ("+", "-"):
             continue
+        if strand is not None and rec["strand"] != strand:
+            continue
         ovlp = (min(read.reference_end, iv.end) -
                 max(read.reference_start, iv.begin))
         if ovlp > best_ovlp:
             best_ovlp, best_gid = ovlp, gid
     return best_gid
+
+
+def choose_gene(read, genes, gene_records, min_mapq, skip_antisense):
+    """(gene_id, status) a read is classified against. (None, None) when
+    gene_of_read drops it. "sense" when the read's strand is its
+    best-overlap gene's (either strand). Otherwise, without skip_antisense,
+    "antisense" with that gene; with skip_antisense (stranded input),
+    "reassigned" with the best-overlap gene on the read's own strand, or
+    (None, "skipped") when no gene on its strand overlaps it."""
+    gid = gene_of_read(read, genes, gene_records, min_mapq)
+    if gid is None:
+        return None, None
+    read_strand = "-" if read.is_reverse else "+"
+    if gene_records[gid]["strand"] == read_strand:
+        return gid, "sense"
+    if not skip_antisense:
+        return gid, "antisense"
+    gid = gene_of_read(read, genes, gene_records, min_mapq, strand=read_strand)
+    if gid is None:
+        return None, "skipped"
+    return gid, "reassigned"
 
 
 def probe_strandedness(bam_path, gene_index, gene_records, min_mapq,
@@ -132,6 +156,7 @@ def _empty_accumulator():
                                   MECH_B_APA:     {"pas": 0, "nopas": 0}},
         "orient":               {"match": 0, "mismatch": 0},
         "antisense_skipped":    0,
+        "antisense_reassigned": 0,
         "site":                 {"observed": 0, "fallback": 0},
         "mecha_read_lengths":    [],
         "capt_read_lengths":     [],
@@ -167,6 +192,7 @@ def _merge_accumulator(dst, src):
     dst["orient"]["match"]    += src["orient"]["match"]
     dst["orient"]["mismatch"] += src["orient"]["mismatch"]
     dst["antisense_skipped"]  += src["antisense_skipped"]
+    dst["antisense_reassigned"] += src["antisense_reassigned"]
     dst["site"]["observed"]   += src["site"]["observed"]
     dst["site"]["fallback"]   += src["site"]["fallback"]
     dst["mecha_read_lengths"].extend(src["mecha_read_lengths"])
@@ -217,20 +243,19 @@ def _process_chrom(chrom):
 
     genes = gene_index[chrom]
     for read in iterator:
-        best_gid = gene_of_read(read, genes, gene_records, min_mapq)
-        if best_gid is None:
+        best_gid, status = choose_gene(read, genes, gene_records, min_mapq,
+                                       skip_antisense)
+        if status is None:
             continue
 
-        rec = gene_records[best_gid]
-        expect_reverse = (rec["strand"] == "-")
-        if read.is_reverse == expect_reverse:
-            acc["orient"]["match"] += 1
-        else:
-            acc["orient"]["mismatch"] += 1
-            if skip_antisense:
-                acc["antisense_skipped"] += 1
-                continue
+        acc["orient"]["match" if status == "sense" else "mismatch"] += 1
+        if status == "skipped":
+            acc["antisense_skipped"] += 1
+            continue
+        if status == "reassigned":
+            acc["antisense_reassigned"] += 1
 
+        rec = gene_records[best_gid]
         site, observed = read_site(read, rec["strand"], site_anchor)
         acc["site"]["observed" if observed else "fallback"] += 1
         cat, cov, _, has_pas = classify_read(read, rec, polya_index, cov_threshold,
@@ -299,8 +324,12 @@ def analyse_bam(bam_path, gene_index, gene_records, polya_index,
     tecap.site.read_site); "site" counts the reads whose site was observed
     and those that fell back to the alignment end.
 
-    With skip_antisense, a read whose strand is opposite its gene's is
-    counted in "antisense_skipped" and in "orient", and nowhere else.
+    "orient" compares each read's strand with its best-overlap gene on
+    either strand. With skip_antisense (stranded input), a read antisense
+    to that gene is classified against the best-overlap gene on its own
+    strand and counted in "antisense_reassigned", or, when no gene on its
+    strand overlaps it, counted in "antisense_skipped" and in "orient" and
+    nowhere else (see choose_gene).
     """
 
     probed_cb_tag = cb_tag
@@ -366,6 +395,7 @@ def analyse_bam(bam_path, gene_index, gene_records, polya_index,
         "pas_counts":            merged["pas_counts"],
         "orient":                merged["orient"],
         "antisense_skipped":     merged["antisense_skipped"],
+        "antisense_reassigned":  merged["antisense_reassigned"],
         "site":                  merged["site"],
         "mecha_read_lengths":    merged["mecha_read_lengths"],
         "capt_read_lengths":     merged["capt_read_lengths"],

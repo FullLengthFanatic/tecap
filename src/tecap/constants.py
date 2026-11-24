@@ -54,9 +54,11 @@ ORIENT_MIN_FRAC = 0.80
 
 
 # --strandedness of classify and basecomp. On stranded input a read antisense
-# to its gene is skipped: its bucket and its site would describe the wrong
-# end. auto calls the input stranded when the first STRANDEDNESS_PROBE_READS
-# reads with a gene match the gene strand in ORIENT_MIN_FRAC of cases or more.
+# to its best-overlap gene is classified against the best-overlap gene on its
+# own strand, or skipped when there is none: against the antisense gene its
+# bucket and its site would describe the wrong end. auto calls the input
+# stranded when the first STRANDEDNESS_PROBE_READS reads with a gene match the
+# gene strand in ORIENT_MIN_FRAC of cases or more.
 STRANDEDNESS             = ("auto", "stranded", "unstranded")
 STRANDEDNESS_DEFAULT     = "auto"
 STRANDEDNESS_PROBE_READS = 200_000

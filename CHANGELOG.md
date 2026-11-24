@@ -5,8 +5,9 @@
 tecap now puts a read's 3' end where flight-polyafilter-bench 1.2.0 puts
 its priming site, and labels each site templated, non-templated or
 ambiguous. The default site moves from the alignment end to the start of
-the read's terminal adenine run, and on stranded input reads antisense to
-their gene are skipped, so most numbers of `classify` and `basecomp`
+the read's terminal adenine run, and on stranded input a read antisense
+to its best-overlap gene is classified against a gene on its own strand,
+or skipped when there is none, so most numbers of `classify` and `basecomp`
 change (old and new values under Changed). `--site-anchor alignment_end
 --strandedness unstranded` gives the 0.4.0 numbers back, apart from the
 off-by-one under Fixed. JSON schema 0.2.
@@ -55,20 +56,31 @@ off-by-one under Fixed. JSON schema 0.2.
   now computes orientation itself and records `orient_match_frac` in its
   JSON (previously only `classify` did).
 - `--strandedness {auto,stranded,unstranded}` on `classify` and
-  `basecomp`, default `auto`. On stranded input a read antisense to its
-  gene (read strand opposite the gene strand) is skipped: it gets no
-  category, site, window, per-cell or per-gene count. `auto` reads the
-  first 200,000 reads the run would classify, contigs in BAM order, and
-  calls the input stranded when 0.80 (`ORIENT_MIN_FRAC`) or more of them
-  match their gene's strand. Two new keys in both JSON outputs:
-  `strandedness`, `{"requested", "resolved", "probe"}`, where `probe` is
-  `{"reads", "match_frac", "stranded"}` under `auto` and null otherwise;
-  and `antisense_skipped`, the number of reads skipped.
-  `orient_match_frac` is computed before the skip and keeps its meaning.
-  Python API: `bam.gene_of_read`, `bam.probe_strandedness`, and
-  `skip_antisense` on `bam.analyse_bam` and `basecomp.analyse`, which
-  count the skipped reads under `antisense_skipped` (in the
-  `analyse_bam` result and in the `site_stats` of `analyse`).
+  `basecomp`, default `auto`. A read's gene is the gene whose span
+  overlaps it the most, genes on both strands competing. On stranded
+  input a read antisense to that gene (read strand opposite the gene
+  strand) is classified against the best-overlap gene on its own strand
+  instead, and gets the category, site, window, per-cell and per-gene
+  count that gene gives; a read with no gene on its strand is skipped:
+  it gets no category, site, window, per-cell or per-gene count. On
+  unstranded input every read keeps its best-overlap gene on either
+  strand. `auto` reads the first 200,000 reads the run would classify,
+  contigs in BAM order, and calls the input stranded when 0.80
+  (`ORIENT_MIN_FRAC`) or more of them match the strand of their
+  best-overlap gene on either strand. Three new keys in both JSON
+  outputs: `strandedness`, `{"requested", "resolved", "probe"}`, where
+  `probe` is `{"reads", "match_frac", "stranded"}` under `auto` and null
+  otherwise; `antisense_reassigned`, the number of reads classified
+  against a gene on their own strand; and `antisense_skipped`, the number
+  of reads skipped. `orient_match_frac` is computed against the
+  best-overlap gene on either strand, before the reassignment and the
+  skip, and keeps its meaning. Python API: `bam.gene_of_read` (its
+  `strand` argument lets only genes of one strand compete),
+  `bam.choose_gene`, which both workers use for the gene and the
+  antisense status, `bam.probe_strandedness`, and `skip_antisense` on
+  `bam.analyse_bam` and `basecomp.analyse`, which count the reassigned
+  and skipped reads under `antisense_reassigned` and `antisense_skipped`
+  (in the `analyse_bam` result and in the `site_stats` of `analyse`).
 - Base composition thresholds stamped into the `basecomp` JSON. The cutoffs
   that produce `frac_ge_60` / `frac_30_50` / `frac_ge_40` and the histogram
   bin count are recorded under a top-level `thresholds` key and sourced from
@@ -99,11 +111,13 @@ off-by-one under Fixed. JSON schema 0.2.
   `--site-anchor alignment_end --strandedness unstranded` reproduces
   0.4.0, apart from the off-by-one under Fixed. Old and new values are in
   the tables at the end of this section.
-- Reads antisense to their gene are skipped on stranded input
-  (`--strandedness`, see Added). The default `auto` calls both libraries
+- On stranded input a read antisense to its best-overlap gene is
+  classified against the best-overlap gene on its own strand, or skipped
+  when no gene on its strand overlaps it (`--strandedness`, see Added).
+  The default `auto` calls both libraries
   below stranded (probe match fraction 0.984 for BD67 and 0.978 for
   10x_FL on the FLNC BAM, 0.994 and 0.988 on chr21 of `accepted.bam`), so
-  their 0.5.0 numbers leave those reads out. Reads skipped, of the reads
+  their 0.5.0 numbers leave the skipped reads out. Reads skipped, of the reads
   assigned to a gene: `basecomp` on the whole FLNC BAM, 1,755,777 of
   50,538,102 (3.47%) for BD67 and 2,214,195 of 52,814,167 (4.19%) for
   10x_FL; `classify` on chr21 of `accepted.bam`, 6,073 of 438,044 (1.39%)
@@ -129,9 +143,9 @@ off-by-one under Fixed. JSON schema 0.2.
     `total_classified`. `read_len_median_mecha` did not change on chr21
     but can.
 
-  `orient_match_frac` does not change: it is computed before the skip.
-  With `--strandedness unstranded`, or under `auto` on input it calls
-  unstranded, nothing is skipped.
+  `orient_match_frac` does not change: it is computed before the
+  reassignment and the skip. With `--strandedness unstranded`, or under
+  `auto` on input it calls unstranded, nothing is reassigned or skipped.
 - `schema_version` is 0.2 in both JSON outputs: new keys (see Added), and
   under the default anchor the numbers are not comparable with those of a
   schema 0.1 JSON.

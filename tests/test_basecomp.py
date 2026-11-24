@@ -5,7 +5,8 @@ import pysam
 import pytest
 
 from tecap import basecomp
-from tecap.basecomp import analyse, downstream_window, rc, summarise
+from tecap.bam import analyse_bam
+from tecap.basecomp import analyse, assign_bucket, downstream_window, rc, summarise
 from tecap.constants import DEFINITION_SOURCE, LABEL_WINDOW, LABELS
 from tecap.gtf import build_gene_index
 from tecap.polya import build_polya_index
@@ -136,12 +137,89 @@ def test_antisense_read_is_skipped_on_stranded_input(antisense_fixture, monkeypa
         skip_antisense=skip,
     )
     assert site_stats["antisense_skipped"] == skipped
+    assert site_stats["antisense_reassigned"] == 0
     assert bucket_counts["Captured"] == 4 - skipped
     assert sorted(a_count_by_bucket["Captured"]) == [0] * (3 - skipped) + [10]
     assert orient == {"match": 12, "mismatch": 1}
     assert site_stats["observed"] + site_stats["fallback"] == 13 - skipped
     if threads == 1:                     # the spy is not seen by forked workers
         assert (9100 in windows) is not skip
+
+
+@pytest.mark.parametrize("skip", [True, False])
+@pytest.mark.parametrize("threads", [1, 2])
+def test_reassigned_read_gets_the_site_of_its_own_gene(reassign_fixture, monkeypatch,
+                                                       skip, threads):
+    """Stranded: r_reassigned_D is bucketed against GD (MechB_exon) with its
+    window at its observed site 2700 on minus; r_antisense_A is skipped.
+    Unstranded: both stay on GA, r_reassigned_D with its window at 3600 on plus."""
+    fx = reassign_fixture
+    windows = []
+
+    def spy(fasta, chrom, pos, strand, win):
+        windows.append((pos, strand))
+        return downstream_window(fasta, chrom, pos, strand, win)
+
+    monkeypatch.setattr(basecomp, "downstream_window", spy)
+    gene_index, gene_records = build_gene_index(fx["gtf"])
+    polya_index = build_polya_index(fx["polya"], slop=25,
+                                    allowed_types={"TE", "DS", "DI", "EX"})
+    _, bucket_counts, orient, site_stats = analyse(
+        bam_path=fx["bam"], fasta_path=fx["fasta"],
+        gene_index=gene_index, gene_records=gene_records,
+        polya_index=polya_index,
+        cov_threshold=0.5, min_mapq=0, window=20, threads=threads,
+        skip_antisense=skip,
+    )
+    assert orient == {"match": 12, "mismatch": 2}
+    if skip:
+        assert (site_stats["antisense_skipped"], site_stats["antisense_reassigned"]) == (1, 1)
+        assert (bucket_counts["Captured"], bucket_counts["MechB_exon"],
+                bucket_counts["MechB_aspecific"]) == (3, 2, 1)
+        assert (site_stats["observed"], site_stats["fallback"]) == (2, 11)
+        # The window [2680, 2700) on minus holds no adenine.
+        assert site_stats["labels"]["MechB_exon"] == {
+            "templated": 0, "nontemplated": 1, "ambiguous": 0}
+    else:
+        assert (site_stats["antisense_skipped"], site_stats["antisense_reassigned"]) == (0, 0)
+        assert (bucket_counts["Captured"], bucket_counts["MechB_exon"],
+                bucket_counts["MechB_aspecific"]) == (4, 1, 2)
+        assert (site_stats["observed"], site_stats["fallback"]) == (1, 13)
+        assert "MechB_exon" not in site_stats["labels"]
+    if threads == 1:                     # the spy is not seen by forked workers
+        assert ((2700, "-") in windows) is skip
+        assert ((3600, "+") in windows) is not skip
+        assert ((9100, "+") in windows) is not skip
+
+
+@pytest.mark.parametrize("skip", [True, False])
+def test_basecomp_and_classify_choose_the_same_gene(reassign_fixture, skip):
+    """Same reads, same statuses and counts: orientation, skipped, reassigned,
+    observed and fallback sites, and the bucket counts classify implies."""
+    fx = reassign_fixture
+    gene_index, gene_records = build_gene_index(fx["gtf"])
+    polya_index = build_polya_index(fx["polya"], slop=25,
+                                    allowed_types={"TE", "DS", "DI", "EX"})
+    common = dict(gene_index=gene_index, gene_records=gene_records,
+                  polya_index=polya_index, cov_threshold=0.5, min_mapq=0,
+                  threads=1, skip_antisense=skip)
+    r = analyse_bam(bam_path=fx["bam"], **common)
+    _, bucket_counts, orient, site_stats = analyse(
+        bam_path=fx["bam"], fasta_path=fx["fasta"], window=20, **common)
+
+    assert orient == r["orient"]
+    assert site_stats["antisense_skipped"] == r["antisense_skipped"]
+    assert site_stats["antisense_reassigned"] == r["antisense_reassigned"]
+    assert (site_stats["observed"], site_stats["fallback"]) == (
+        r["site"]["observed"], r["site"]["fallback"])
+    implied = {}
+    for cat, n in r["counts"].items():
+        split = r["pas_counts"].get(cat, {"pas": 0, "nopas": n})
+        for has_pas, k in ((True, split["pas"]), (False, split["nopas"])):
+            b = assign_bucket(cat, has_pas)
+            if b is not None and k:
+                implied[b] = implied.get(b, 0) + k
+    assert bucket_counts == implied
 
 
 def test_summarise_stamps_thresholds():

@@ -8,7 +8,14 @@ import sys
 import pysam
 import pytest
 
-from tecap.constants import BUCKETS, DEFINITION_SOURCE, SITE_ANCHOR_DEFAULT
+from tecap.constants import (
+    BUCKETS,
+    CAPTURED,
+    DEFINITION_SOURCE,
+    MECH_B_ASPECI,
+    MECH_B_EXON,
+    SITE_ANCHOR_DEFAULT,
+)
 
 
 def _run_cli(args, cwd=None):
@@ -201,6 +208,7 @@ def test_strandedness_and_antisense_skipped_in_both_jsons(antisense_fixture, tmp
         assert data["strandedness"] == {"requested": flag or "auto",
                                         "resolved": resolved, "probe": probe}, cmd
         assert data["antisense_skipped"] == skipped, cmd
+        assert data["antisense_reassigned"] == 0, cmd
         assert data["orient_match_frac"] == 12 / 13, cmd
         assert sum(data["site_counts"].values()) == 13 - skipped, cmd
         if cmd == "classify":
@@ -209,6 +217,38 @@ def test_strandedness_and_antisense_skipped_in_both_jsons(antisense_fixture, tmp
             assert data["total"] == 13 - skipped
         else:
             assert data["buckets"]["Captured"]["n"] == 4 - skipped
+
+
+@pytest.mark.parametrize("flag, resolved, probe, skipped, reassigned", [
+    ("stranded",   "stranded",   None, 1, 1),
+    ("unstranded", "unstranded", None, 0, 0),
+    # auto: 12 of 14 reads sense to their best-overlap gene, 0.86 >= 0.80.
+    (None,         "stranded",   {"reads": 14, "match_frac": 12 / 14, "stranded": True}, 1, 1),
+])
+def test_antisense_reassigned_in_both_jsons(reassign_fixture, tmp_path,
+                                            flag, resolved, probe, skipped, reassigned):
+    """Stranded: r_reassigned_D is classified against GD on its own strand
+    (MechB-exon, observed site), r_antisense_A is skipped. Unstranded: both
+    stay on GA (MechB-aspecific and Captured)."""
+    extra = ["--strandedness", flag] if flag else []
+    for cmd, _, data in _run_both(reassign_fixture, tmp_path, extra):
+        assert data["strandedness"] == {"requested": flag or "auto",
+                                        "resolved": resolved, "probe": probe}, cmd
+        assert (data["antisense_skipped"], data["antisense_reassigned"]) == (
+            skipped, reassigned), cmd
+        assert data["orient_match_frac"] == 12 / 14, cmd
+        assert data["site_counts"] == ({"observed": 2, "fallback": 11} if reassigned
+                                       else {"observed": 1, "fallback": 13}), cmd
+        want = (3, 2, 1) if reassigned else (4, 1, 2)
+        if cmd == "classify":
+            c = data["counts"]
+            assert (c[CAPTURED], c[MECH_B_EXON], c[MECH_B_ASPECI]) == want
+            assert data["total"] == 14 - skipped
+        else:
+            b = data["buckets"]
+            assert (b["Captured"]["n"], b["MechB_exon"]["n"],
+                    b["MechB_aspecific"]["n"]) == want
+            assert b["MechB_exon"]["n_nontemplated"] == reassigned
 
 
 def test_auto_resolves_stranded_on_the_fixture(synthetic_fixture, tmp_path):

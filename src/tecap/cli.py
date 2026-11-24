@@ -69,9 +69,12 @@ def _add_common_indexing_args(p):
                         "alignment end when the read has no run). "
                         f"Default {SITE_ANCHOR_DEFAULT}.")
     p.add_argument("--strandedness", choices=STRANDEDNESS, default=STRANDEDNESS_DEFAULT,
-                   help="Library strandedness. On stranded input, reads antisense "
-                        "to their gene are skipped and counted in "
-                        "antisense_skipped. auto calls the input stranded when "
+                   help="Library strandedness. On stranded input, a read antisense "
+                        "to its best-overlap gene is classified against the "
+                        "best-overlap gene on its own strand (counted in "
+                        "antisense_reassigned), or skipped when no gene on its "
+                        "strand overlaps it (counted in antisense_skipped). "
+                        "auto calls the input stranded when "
                         f"the first {STRANDEDNESS_PROBE_READS:,} reads with a gene "
                         f"match the gene strand in {ORIENT_MIN_FRAC:.2f} of cases "
                         f"or more. Default {STRANDEDNESS_DEFAULT}.")
@@ -332,6 +335,7 @@ def _cmd_classify(args):
                                  if orient_total else None),
         "strandedness":         strandedness,
         "antisense_skipped":    results["antisense_skipped"],
+        "antisense_reassigned": results["antisense_reassigned"],
         "utr_bin_labels":       UTR_BIN_LABELS,
         "utr_bin_total":        results["utr_bin_total"],
         "utr_bin_mecha_correct": results["utr_bin_mecha_correct"],
@@ -439,6 +443,7 @@ def _cmd_basecomp(args):
 
     labels = site_stats.pop("labels")
     antisense_skipped = site_stats.pop("antisense_skipped")
+    antisense_reassigned = site_stats.pop("antisense_reassigned")
     summary = summarise(a_count_by_bucket, window=args.window, labels=labels)
     summary["sample"]            = args.sample
     summary["platform"]          = args.platform
@@ -450,6 +455,7 @@ def _cmd_basecomp(args):
     summary["orient_match_frac"] = orient_match_frac
     summary["strandedness"]      = strandedness
     summary["antisense_skipped"] = antisense_skipped
+    summary["antisense_reassigned"] = antisense_reassigned
 
     warn_if_unstranded(orient_match_frac, log)
 

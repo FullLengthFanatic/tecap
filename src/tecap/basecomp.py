@@ -8,7 +8,7 @@ from collections import defaultdict
 import numpy as np
 import pysam
 
-from tecap.bam import gene_of_read
+from tecap.bam import choose_gene
 from tecap.classify import classify_read
 from tecap.constants import (
     BASECOMP_GE_HI,
@@ -120,7 +120,8 @@ def _process_chrom_bc(chrom):
     counts            = defaultdict(int)
     n_no_seq          = 0
     orient            = {"match": 0, "mismatch": 0}
-    site_stats        = {"observed": 0, "fallback": 0, "antisense_skipped": 0, "labels": {}}
+    site_stats        = {"observed": 0, "fallback": 0, "antisense_skipped": 0,
+                         "antisense_reassigned": 0, "labels": {}}
 
     try:
         bam   = pysam.AlignmentFile(bam_path, "rb")
@@ -138,19 +139,19 @@ def _process_chrom_bc(chrom):
 
     genes = gene_index[chrom]
     for read in iterator:
-        best_gid = gene_of_read(read, genes, gene_records, min_mapq)
-        if best_gid is None:
+        best_gid, status = choose_gene(read, genes, gene_records, min_mapq,
+                                       skip_antisense)
+        if status is None:
             continue
 
-        rec = gene_records[best_gid]
-        if read.is_reverse == (rec["strand"] == "-"):
-            orient["match"] += 1
-        else:
-            orient["mismatch"] += 1
-            if skip_antisense:
-                site_stats["antisense_skipped"] += 1
-                continue
+        orient["match" if status == "sense" else "mismatch"] += 1
+        if status == "skipped":
+            site_stats["antisense_skipped"] += 1
+            continue
+        if status == "reassigned":
+            site_stats["antisense_reassigned"] += 1
 
+        rec = gene_records[best_gid]
         site, observed = read_site(read, rec["strand"], site_anchor)
         site_stats["observed" if observed else "fallback"] += 1
         cat, _, _, has_pas = classify_read(read, rec, polya_index, cov_threshold,
@@ -201,9 +202,13 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     "labels" the label of each bucketed read with an observed site and a
     window, per bucket. Labels are counted only when window is LABEL_WINDOW.
 
-    With skip_antisense, a read whose strand is opposite its gene's is
-    counted in orient and in site_stats["antisense_skipped"], and gets no
-    site, bucket or window.
+    orient compares each read's strand with its best-overlap gene on either
+    strand. With skip_antisense (stranded input), a read antisense to that
+    gene is bucketed against the best-overlap gene on its own strand and
+    counted in site_stats["antisense_reassigned"], or, when no gene on its
+    strand overlaps it, counted in orient and in
+    site_stats["antisense_skipped"] and gets no site, bucket or window (see
+    tecap.bam.choose_gene).
     """
     contigs = _populated_contigs(bam_path)
     log.info("Basecomp analysing %d populated contigs with %d worker(s) (window=%d)",
@@ -224,7 +229,8 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
     bucket_counts     = defaultdict(int)
     n_no_seq_total    = 0
     orient            = {"match": 0, "mismatch": 0}
-    site_stats        = {"observed": 0, "fallback": 0, "antisense_skipped": 0, "labels": {}}
+    site_stats        = {"observed": 0, "fallback": 0, "antisense_skipped": 0,
+                         "antisense_reassigned": 0, "labels": {}}
 
     try:
         if threads <= 1:
@@ -240,6 +246,7 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
                 site_stats["observed"] += sst["observed"]
                 site_stats["fallback"] += sst["fallback"]
                 site_stats["antisense_skipped"] += sst["antisense_skipped"]
+                site_stats["antisense_reassigned"] += sst["antisense_reassigned"]
                 for b, by_label in sst["labels"].items():
                     tot = site_stats["labels"].setdefault(b, dict.fromkeys(LABELS, 0))
                     for x, v in by_label.items():
@@ -258,6 +265,7 @@ def analyse(bam_path, fasta_path, gene_index, gene_records, polya_index,
                     site_stats["observed"] += sst["observed"]
                     site_stats["fallback"] += sst["fallback"]
                     site_stats["antisense_skipped"] += sst["antisense_skipped"]
+                    site_stats["antisense_reassigned"] += sst["antisense_reassigned"]
                     for b, by_label in sst["labels"].items():
                         tot = site_stats["labels"].setdefault(b, dict.fromkeys(LABELS, 0))
                         for x, v in by_label.items():
