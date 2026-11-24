@@ -66,7 +66,7 @@ def _add_common_indexing_args(p):
                    help="Read 3' end used to classify reads and, in basecomp, to "
                         "start the downstream window: alignment_end, or "
                         "a_run_start (where the read's terminal A run starts; the "
-                        "alignment end when the read has no run). "
+                        "alignment end when the run has fewer than 10 A's). "
                         f"Default {SITE_ANCHOR_DEFAULT}.")
     p.add_argument("--strandedness", choices=STRANDEDNESS, default=STRANDEDNESS_DEFAULT,
                    help="Library strandedness. On stranded input, a read antisense "
