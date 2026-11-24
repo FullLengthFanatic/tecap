@@ -8,7 +8,7 @@ Version 0.5.0. MIT licensed. [github.com/FullLengthFanatic/tecap](https://github
 
 ## Abstract
 
-`tecap` reads a long-read RNA-seq alignment file and asks a single question of every transcript: where did its 3' end actually come from? Each multi-exon read is sorted into one of nine mechanism buckets based on where its 3' end lands relative to the gene's terminal exon, its 3' UTR, and a reference atlas of real polyadenylation sites. It then counts the adenines in the 20 nt of genome just downstream of each read's site and labels the site templated (8 or more), non-templated (4 or fewer) or ambiguous (5 to 7): the bucket says where the site is, the label says what kind of site it is. It also reports two descriptive bands of the adenine share, 30% to 50% A and 60% A or more. On real data single-cell library preps are enriched in the 30% to 50% band and bulk Iso-Seq in the 60% or more band, a clean split whose biochemical cause is not yet known. tecap is a diagnostic, not a filter: it tells you *why* a protocol's reads end where they do, not whether they pass.
+`tecap` reads a long-read RNA-seq alignment file and asks a single question of every transcript: where did its 3' end actually come from? Each multi-exon read is sorted into one of nine mechanism buckets based on where its 3' end lands relative to the gene's terminal exon, its 3' UTR, and a reference atlas of real polyadenylation sites. It then counts the adenines in the 20 nt of genome just downstream of each read's site and labels the site templated (8 or more), non-templated (4 or fewer) or ambiguous (5 to 7): the bucket says where the site is, the label says what kind of site it is. It also reports descriptive bands of the adenine share, among them 30% to 50% A and 60% A or more. Measured at the alignment end (tecap 0.4.0), single-cell library preps are enriched in the 30% to 50% band and bulk Iso-Seq in the 60% or more band, a split whose biochemical cause is not yet known. tecap is a diagnostic, not a filter: it tells you *why* a protocol's reads end where they do, not whether they pass.
 
 ---
 
@@ -132,6 +132,8 @@ The whole tool is pure Python (`pysam`, `intervaltree`, `numpy`, `matplotlib`); 
 ---
 
 ## 4. What the output reveals: a worked example
+
+The numbers in this section come from tecap 0.4.0, at the alignment end, before the site anchor and the labels existed. Under the 0.5.0 default (`--site-anchor a_run_start`) the downstream window starts where the read's adenine run starts and the bands move: on the two single-cell libraries measured for 0.5.0 (BD67 and 10x_FL), MechB_aspecific `frac_ge_60` is 0.47 and 0.57 (see CHANGELOG 0.5.0). `--site-anchor alignment_end` reproduces the measurement below.
 
 ### Single-cell vs single-cell (10x vs BD FLASH-seq)
 

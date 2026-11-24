@@ -254,11 +254,13 @@ PLOT_CAPTIONS = {
         "Per-bucket histograms of %A in the {window} nt reference window "
         "immediately downstream of each read's site. Grey shading marks 30% "
         "to 50% A and the dashed line marks 60% A; both are descriptive bands "
-        "and do not name a priming mechanism. Empirically, single-cell prep "
+        "and do not name a priming mechanism. Measured at the alignment end "
+        "(tecap 0.4.0, or --site-anchor alignment_end), single-cell prep "
         "datasets (10x, in-house FLASH-seq variants on the BD Rhapsody "
-        "platform and on plates, ArgenTag) cluster in the grey band; "
-        "bulk Iso-Seq datasets cluster past the dashed line. "
-        "The biochemical driver of this split is currently uncharacterized."
+        "platform and on plates, ArgenTag) cluster in the grey band and "
+        "bulk Iso-Seq datasets past the dashed line; the split has not been "
+        "measured at the default site anchor, and its biochemical driver is "
+        "uncharacterized."
     ),
     "comparison_basecomp": (
         "Cross-sample %A histograms in the {window} nt window downstream of "

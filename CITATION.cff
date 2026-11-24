@@ -7,9 +7,10 @@ abstract: >-
   capture failures into nine mechanism buckets and measures reference base
   composition downstream of each read's site: it labels the site templated,
   non-templated or ambiguous from the adenines in the 20 nt downstream, and
-  reports two descriptive bands of the adenine share (30% to 50% A, 60% A or
-  more). Empirically the two bands split single-cell preps from bulk Iso-Seq;
-  the biochemical driver of the split is currently uncharacterized.
+  reports descriptive bands of the adenine share (30% to 50% A, 40% A or more,
+  60% A or more). Measured at the alignment end, the 30% to 50% and 60% bands
+  split single-cell preps from bulk Iso-Seq; the biochemical driver of the
+  split is uncharacterized.
 type: software
 authors:
   - family-names: Picelli
