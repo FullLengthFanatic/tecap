@@ -212,7 +212,7 @@ def plot_histograms_basecomp(summary, sample, out_dir, window):
     bin_mid   = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
     fig, axes = plt.subplots(2, 4, figsize=(22, 11), sharex=True, sharey=True)
-    fig.suptitle(f"Base composition {window} nt downstream of cleavage "
+    fig.suptitle(f"Base composition {window} nt downstream of each read's site "
                  f"(reference, mRNA orientation) -- {sample}",
                  fontsize=15, fontweight="bold")
     axes = axes.flatten()
@@ -268,7 +268,7 @@ def plot_comparison_basecomp(all_summaries, out_dir, window):
     bin_mid   = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
     fig, axes = plt.subplots(2, 4, figsize=(24, 12), sharex=True, sharey=True)
-    fig.suptitle(f"Base composition {window} nt downstream of cleavage -- cross-sample comparison",
+    fig.suptitle(f"Base composition {window} nt downstream of each read's site -- cross-sample comparison",
                  fontsize=15, fontweight="bold")
     axes = axes.flatten()
 

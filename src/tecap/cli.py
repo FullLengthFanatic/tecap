@@ -215,7 +215,7 @@ def _build_parser():
     pb.add_argument("--sample", default="sample")
     pb.add_argument("--out-dir", default=".")
     pb.add_argument("--window", type=int, default=20,
-                    help="Window size (nt) downstream of cleavage (default 20)")
+                    help="Window size (nt) downstream of each read's site (default 20; labels need 20)")
     _add_common_indexing_args(pb)
 
     # compare

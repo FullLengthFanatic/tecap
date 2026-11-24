@@ -419,7 +419,7 @@ def build_single_report(classify_json, basecomp_json=None, out_dir=None):
     if bc_summary is not None:
         window = bc_summary.get("window", 20)
         parts += [
-            "<h2>Base composition downstream of cleavage</h2>",
+            "<h2>Base composition downstream of each read's site</h2>",
             _maybe_embed_png(bc_png),
             f"<p class='caption'>{escape(PLOT_CAPTIONS['basecomp'].format(window=window))}</p>",
             "<h3>Per-bucket %A summary</h3>",

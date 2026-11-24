@@ -91,7 +91,7 @@ tecap classify \
     --polya-sites atlas.clusters.3.0.GRCh38.GENCODE_42.bed.gz \
     --sample S1 --out-dir results/ --threads 8
 
-# Measure base composition in the 20 nt window downstream of each cleavage site
+# Measure base composition in the 20 nt window downstream of each read's site
 tecap basecomp \
     --bam sample.bam \
     --genome GRCh38 \

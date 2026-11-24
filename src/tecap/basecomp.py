@@ -1,5 +1,5 @@
 """Base composition analysis in the N-nt reference window downstream of each
-read's 3' cleavage site (mRNA orientation)."""
+read's site (mRNA orientation; see tecap.site.read_site)."""
 
 import logging
 import multiprocessing as mp
