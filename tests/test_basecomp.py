@@ -112,6 +112,24 @@ def test_window_of_internal_kept_follows_the_anchor(synthetic_fixture, monkeypat
     assert p + 10 - offset not in windows
 
 
+@pytest.mark.parametrize("anchor, offset", [("a_run_start", 0), ("alignment_end", 10)])
+def test_worker_passes_the_site_to_classify_read(synthetic_fixture, monkeypatch, anchor, offset):
+    fx = synthetic_fixture
+    seen, real = {}, basecomp.classify_read
+
+    def spy(read, rec, polya_index, cov_threshold, read_3prime=None):
+        seen[read.query_name] = read_3prime
+        return real(read, rec, polya_index, cov_threshold, read_3prime=read_3prime)
+
+    monkeypatch.setattr(basecomp, "classify_read", spy)
+    gene_index, gene_records = build_gene_index(fx["gtf"])
+    polya_index = build_polya_index(fx["polya"], slop=25, allowed_types={"TE", "DS", "DI", "EX"})
+    analyse(bam_path=fx["bam"], fasta_path=fx["fasta"], gene_index=gene_index,
+            gene_records=gene_records, polya_index=polya_index, cov_threshold=0.5,
+            min_mapq=0, window=20, threads=1, site_anchor=anchor)
+    assert seen["r_internal_kept"] == fx["internal_kept_site"] + offset
+
+
 @pytest.mark.parametrize("skip, skipped", [(True, 1), (False, 0)])
 @pytest.mark.parametrize("threads", [1, 2])
 def test_antisense_read_is_skipped_on_stranded_input(antisense_fixture, monkeypatch,

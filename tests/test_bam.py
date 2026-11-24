@@ -4,6 +4,7 @@
 import pysam
 import pytest
 
+from tecap import bam as bam_mod
 from tecap.bam import analyse_bam, choose_gene, gene_of_read, probe_strandedness
 from tecap.constants import CAPTURED, MECH_B_ASPECI, MECH_B_EXON
 from tecap.gtf import build_gene_index
@@ -206,6 +207,24 @@ def test_per_gene_counts_present(synthetic_fixture):
     # All three genes should have at least one read assigned.
     seen = set(r["per_gene"].keys())
     assert {"GA", "GB", "GC"}.issubset(seen)
+
+
+@pytest.mark.parametrize("anchor, offset", [("a_run_start", 0), ("alignment_end", 10)])
+def test_worker_passes_the_site_to_classify_read(synthetic_fixture, monkeypatch, anchor, offset):
+    fx = synthetic_fixture
+    seen, real = {}, bam_mod.classify_read
+
+    def spy(read, rec, polya_index, cov_threshold, read_3prime=None):
+        seen[read.query_name] = read_3prime
+        return real(read, rec, polya_index, cov_threshold, read_3prime=read_3prime)
+
+    monkeypatch.setattr(bam_mod, "classify_read", spy)
+    gene_index, gene_records = build_gene_index(fx["gtf"])
+    polya_index = build_polya_index(fx["polya"], slop=25, allowed_types={"TE", "DS", "DI", "EX"})
+    analyse_bam(bam_path=fx["bam"], gene_index=gene_index, gene_records=gene_records,
+                polya_index=polya_index, cov_threshold=0.5, min_mapq=0, threads=1,
+                site_anchor=anchor)
+    assert seen["r_internal_kept"] == fx["internal_kept_site"] + offset
 
 
 def test_warn_if_unstranded_fires_below_threshold(caplog):
