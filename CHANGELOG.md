@@ -151,9 +151,11 @@ off-by-one under Fixed. JSON schema 0.2.
     `pas_fraction`, `utr_bin_total`, `utr_bin_captured`,
     `utr_bin_capt_rate`, `utr_bin_mecha_correct`, `utr_bin_mecha_rate`,
     `cov_median_by_cat`, `read_len_median_capt`, `per_cell_metrics`, the
-    per-gene TSV (genes whose reads are all skipped drop out, genes that
-    receive reassigned reads come in: 247 to 263 genes for BD67 and 289
-    to 310 for 10x_FL on chr21), and the MultiQC columns
+    per-gene TSV (a gene whose reads all lie antisense to it drops out,
+    as those reads go to a gene on their own strand or are skipped,
+    unless it receives reassigned reads; genes that receive reassigned
+    reads come in: 247 to 263 genes for BD67 and 289 to 310 for 10x_FL
+    on chr21), and the MultiQC columns
     `captured_pct`, `mecha_correct_pct`, `mechb_aspeci_pct`,
     `mecha_pas_pos_frac`, `mechb_apa_pas_pos_frac` and
     `total_classified`. `read_len_median_mecha` changed on chr21 for
