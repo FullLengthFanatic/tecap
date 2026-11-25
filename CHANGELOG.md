@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.5.0] - <date of release, set by Simone>
+## [0.5.0] - 2026-11-25
 
 tecap now puts a read's 3' end where flight-polyafilter-bench 1.2.0 puts
 its priming site, and labels each site templated, non-templated or
