@@ -25,6 +25,10 @@ off-by-one under Fixed. JSON schema 0.2.
   clip). A read without such a run, and a record stored without SEQ, falls
   back to the alignment end. Coverage of the terminal exon stays on the
   alignment, so the Captured call does not depend on the anchor.
+  tecap takes the benchmark's site rule but not its long-read read
+  filters: it does not require MAPQ 20 (`--min-mapq` defaults to 0) or,
+  for BD67, 30 nt of bead sequence after the run; benchmark stage 30
+  applies both before it runs tecap.
 - `site_anchor` and `site_counts` in the `classify` and `basecomp` JSON.
   `site_counts` is `{"observed": n, "fallback": n}`: reads whose site came
   from an adenine run, and reads that fell back to the alignment end.
