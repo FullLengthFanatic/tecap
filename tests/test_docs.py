@@ -31,3 +31,10 @@ def test_docs_name_the_long_read_filters_tecap_leaves_out():
             assert f"does not require MAPQ {LONG_READ['min_mapq']} (`--min-mapq` defaults to {default})" in text
             assert f"{LONG_READ['min_after']['BD67']} nt of bead sequence after the run" in text
             assert "stage 30 applies both before it runs tecap." in text
+
+
+def test_readme_says_alignment_end_labels_need_trimmed_input():
+    text = _readme_site_anchor()
+    assert ("which labels every read at its alignment end. These labels describe the priming "
+            "site only on such input;") in text
+    assert "the label fields under `alignment_end` are measured at the wrong site." in text
